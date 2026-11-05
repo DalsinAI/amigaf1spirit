@@ -1,0 +1,35 @@
+F-1 Spirit for AmigaOS 3.x: what is in the package, and under which terms
+========================================================================
+
+The game
+--------
+F-1 Spirit, "the unofficial remake of Konami's F-1 SPIRIT" (MSX, 1987), by
+Brain Games (Santi "Popolon" Ontanon and the others in ReadMe-f1spirit's
+credits), (C) 2003-2009 Brain Games, release 0.rc9 build 1615, from
+https://braingames.jorito.net/f1spirit/f1spirit.src_0.rc9-1615.tgz.
+
+Its source archive carries one licence statement, in debian/copyright
+(written by Patsie, Brain Games' packager, 2009): the game, by Brain Games,
+under the "GPL", no version named. The archive has no COPYING file and its
+files no notices of their own; the GNU GPL says a program that names no
+version may be used under any version. COPYING.txt here is version 2,
+the version this port's own files are under.
+
+That statement covers the whole archive: the program and its data
+(graphics/, sound/, tracks/, demos/). The package ships them as they are.
+
+F-1 Spirit is a remake of a Konami game: its name, its look and its
+tracks follow Konami's original, and readme.txt (ReadMe-f1spirit) says
+Brain Games is not related to Konami and made it not for profit. This
+port is likewise not for sale and not connected with Konami.
+
+The port
+--------
+The port's own files (amiga/, and the changes marked __amigaos__ in
+sources/) are by the AmiCradle Team, under the GPL, version 2 or later.
+
+Built into the program:
+- stb_image 2.30 and stb_vorbis 1.22 (Sean Barrett): public domain, or
+  the MIT licence.
+- GFOpenGPU's SDL 1.2 (sdl12-compat on SDL 2): the zlib licence; its
+  OpenGL (Mesa): the MIT licence.

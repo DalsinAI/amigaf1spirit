@@ -1,0 +1,14 @@
+{
+  "name": "F-1 Spirit",
+  "version": "0.rc9.1615-amigaos3-test1",
+  "drawer": "F1Spirit",
+  "program": "F1Spirit",
+  "cpu": "68040",
+  "fpu": true,
+  "space": 34000000,
+  "modules": ["SDL2.module", "GL.module"],
+  "keep": ["User"],
+  "parent": "Work:Games",
+  "badge": "icons/art/f1spirit.png",
+  "script": "Install-F1Spirit"
+}
