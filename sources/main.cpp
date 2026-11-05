@@ -79,6 +79,10 @@ char console_msg[80] = "";
 
 /*      AUXILIAR FUNCTION DEFINITION:       */
 
+#ifdef __amigaos__
+extern "C" void amiga_init(void);   /* amiga/amiga_sys.c */
+#endif
+
 
 SDL_Surface *initialization(int flags)
 {
@@ -265,6 +269,10 @@ int main(int argc, char** argv) {
 	bool quit = false;
 	bool need_to_redraw = true;
 
+#ifdef __amigaos__
+	amiga_init();
+#endif
+
 #ifdef F1SPIRIT_DEBUG_MESSAGES
 
 	output_debug_message("Application started\n");
@@ -315,6 +323,12 @@ int main(int argc, char** argv) {
 						quit = true;
 					} 
 
+#endif
+#ifdef __amigaos__
+					/* Right Amiga+Q quits, as in the other Amiga ports */
+					if (event.key.keysym.sym == SDLK_q &&
+					        (SDL_GetModState() & KMOD_META) != 0)
+						quit = true;
 #endif
 					if (event.key.keysym.sym == SDLK_F10) {
 						game->save_configuration("f1spirit.cfg");

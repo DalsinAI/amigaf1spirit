@@ -38,6 +38,18 @@ FILE *f1open(const char *f, const char *m, const enum filetype t)
 #ifdef _WIN32
 	// nothing changed here, works perfectly :)
 	return(fopen(f, m));
+#elif defined(__amigaos__)
+	// AmigaOS: the program runs in its own drawer (amiga/amiga_sys.c makes
+	// PROGDIR: the current drawer), so the game data is found as it is;
+	// the player's data goes in the drawer's User drawer.
+	char fname[STRLEN];
+
+	if (t == GAMEDATA)
+		return(fopen(f, m));
+
+	snprintf(fname, STRLEN - 1, "PROGDIR:User/%s", f);
+	mkdirp(fname, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+	return(fopen(fname, m));
 #else
 	// *nix is a bitch ;)
 	char fname[STRLEN];
