@@ -325,9 +325,11 @@ int main(int argc, char** argv) {
 
 #endif
 #ifdef __amigaos__
-					/* Right Amiga+Q quits, as in the other Amiga ports */
+					/* Right Amiga+Q quits, as in the other Amiga ports. The
+					   event's own modifiers: a slow frame drains the events
+					   late, when the Amiga key may be up already. */
 					if (event.key.keysym.sym == SDLK_q &&
-					        (SDL_GetModState() & KMOD_META) != 0)
+					        (event.key.keysym.mod & KMOD_META) != 0)
 						quit = true;
 #endif
 					if (event.key.keysym.sym == SDLK_F10) {
