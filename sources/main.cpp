@@ -424,6 +424,9 @@ int main(int argc, char** argv) {
 						} 
 					} 
 
+#ifdef __amigaos__
+					KEYBOARDSTATE::press(event.key.keysym.sym);
+#endif
 					/* Keyboard event */
 					SDL_keysym *ks;
 
