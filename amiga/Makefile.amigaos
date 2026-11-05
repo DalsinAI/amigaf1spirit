@@ -34,7 +34,8 @@ INC     = -Iamiga/include -Iamiga -Isources -I$(KIT)/include/SDL -I$(KIT)/includ
 CFLAGS  = -noixemul $(OPT) $(CPU) $(DEFS) $(INC) -MMD -MP
 CXXFLAGS = $(CFLAGS) -std=gnu++98 -Wno-write-strings -fpermissive
 LDFLAGS = -noixemul $(CPU) -Wl,-Map,$(BUILD)/$(PROG).map
-LIBS    = -L$(KIT)/lib -lSDL_gl -lSDL -lGL -lm -lpthread
+# sdl-config --libs --gl: -Wl,-u,_SDL12Amiga_gl pulls in SDL 1.2's OpenGL.
+LIBS    = -L$(KIT)/lib -Wl,-u,_SDL12Amiga_gl -lSDL_gl -lSDL -lGL -lm -lpthread
 
 # Upstream's build/linux/Makefile list, with F1Shttp.cpp (libcurl)
 # replaced by amiga/F1Shttp_amiga.cpp.
@@ -57,7 +58,7 @@ DATADIRS = demos graphics sound tracks
 
 all: $(BUILD)/$(PROG)
 
-$(BUILD)/$(PROG): $(OBJS)
+$(BUILD)/$(PROG): $(OBJS) amiga/Makefile.amigaos
 	$(CXX) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
 
 $(OBJDIR)/sources/%.o: sources/%.cpp
