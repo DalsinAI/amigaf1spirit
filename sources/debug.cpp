@@ -21,6 +21,14 @@ void output_debug_message(const char *fmt, ...)
 	if (fmt == 0)
 		return ;
 
+#if defined(__amigaos__) && !defined(F1SPIRIT_AMIGA_DEBUG)
+	/* AmigaOS: no log unless built with -DF1SPIRIT_AMIGA_DEBUG. It is
+	   flushed to disk at every message, even from the audio callback (the
+	   car engine's effect, many times a second), which slowed the game to
+	   a crawl in the lab. */
+	return ;
+#endif
+
 	va_start(ap, fmt);
 
 	vsprintf(text, fmt, ap);
