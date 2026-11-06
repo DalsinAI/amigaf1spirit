@@ -85,6 +85,9 @@ CReplayInfo::CReplayInfo(char *fn, char *folder)
 		version_tag[4] = fgetc(fp);
 		version_tag[5] = fgetc(fp);
 		version_tag[6] = 0;
+#ifdef __amigaos__
+		f1s_le_numbers = true;
+#endif
 
 		for (found = false, i = 0;!found && i < nversions;i++) {
 			if (strcmp(versions[i], version_tag) == 0) {
@@ -118,6 +121,9 @@ CReplayInfo::CReplayInfo(char *fn, char *folder)
 			} 
 		} 
 
+#ifdef __amigaos__
+		f1s_le_numbers = false;
+#endif
 		fclose(fp);
 	} 
 

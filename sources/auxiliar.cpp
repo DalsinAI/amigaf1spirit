@@ -1738,59 +1738,55 @@ char get_key_ascii(int key)
 
 
 #ifdef __amigaos__
-/* AmiCradle: the files (replays, the demos among them, and hi-scores) keep
- * their numbers in the PC's byte order, least significant byte first; a
- * big-endian machine turns them round. Read as they are, the demos gave the
- * cars positions that are not numbers, and sorting the race order on them
- * never ended (the title screen's demo hung the game). */
+/* AmiCradle: replays (the demos among them) keep their numbers least
+ * significant byte first, as the PC that made the demos wrote them. Read
+ * in the 68k's order, the demo cars' positions were not numbers, and the
+ * bubble sort of the race order on them never ended: the title screen
+ * hung once its demo started. While f1s_le_numbers is set (reading and
+ * writing replays) the bytes are turned round; the players' and
+ * hi-score files stay in the order earlier Amiga builds wrote them. */
+bool f1s_le_numbers = false;
+
+static void put4(FILE *fp, const unsigned char *p)
+{
+	int i;
+
+	for (i = 0;i < 4;i++)
+		fputc(p[f1s_le_numbers ? 3 - i : i], fp);
+}
+
+static void get4(FILE *fp, unsigned char *p)
+{
+	int i;
+
+	for (i = 0;i < 4;i++)
+		p[f1s_le_numbers ? 3 - i : i] = fgetc(fp);
+}
+
 bool save_float(FILE *fp, float f)
 {
-	unsigned char *p;
-	p = (unsigned char *) & f;
-	fputc(p[3], fp);
-	fputc(p[2], fp);
-	fputc(p[1], fp);
-	fputc(p[0], fp);
-
+	put4(fp, (unsigned char *) & f);
 	return true;
 } /* save_float */
 
 
 bool load_float(FILE *fp, float *f)
 {
-	unsigned char *p;
-	p = (unsigned char *)f;
-	p[3] = fgetc(fp);
-	p[2] = fgetc(fp);
-	p[1] = fgetc(fp);
-	p[0] = fgetc(fp);
-
+	get4(fp, (unsigned char *)f);
 	return true;
 } /* load_float */
 
 
 bool save_int(FILE *fp, int f)
 {
-	unsigned char *p;
-	p = (unsigned char *) & f;
-	fputc(p[3], fp);
-	fputc(p[2], fp);
-	fputc(p[1], fp);
-	fputc(p[0], fp);
-
+	put4(fp, (unsigned char *) & f);
 	return true;
 } /* save_int */
 
 
 bool load_int(FILE *fp, int *f)
 {
-	unsigned char *p;
-	p = (unsigned char *)f;
-	p[3] = fgetc(fp);
-	p[2] = fgetc(fp);
-	p[1] = fgetc(fp);
-	p[0] = fgetc(fp);
-
+	get4(fp, (unsigned char *)f);
 	return true;
 } /* load_int */
 #else

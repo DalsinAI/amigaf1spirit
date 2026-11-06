@@ -2211,6 +2211,10 @@ bool F1SpiritGame::cycle(KEYBOARDSTATE *k)
 	*/
 	rg->RandomInit(replay_cycle);
 
+#ifdef __amigaos__
+	f1s_le_numbers = true;
+#endif
+
 	if (replay_fp != 0) {
 		if (replay_cycle == 0) {
 			int i;
@@ -2374,6 +2378,9 @@ bool F1SpiritGame::cycle(KEYBOARDSTATE *k)
 		} 
 	} 
 
+#ifdef __amigaos__
+	f1s_le_numbers = false;
+#endif
 
 	switch (race_state) {
 
