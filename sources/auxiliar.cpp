@@ -1737,6 +1737,63 @@ char get_key_ascii(int key)
 } /* get_key_ascii */
 
 
+#ifdef __amigaos__
+/* AmiCradle: the files (replays, the demos among them, and hi-scores) keep
+ * their numbers in the PC's byte order, least significant byte first; a
+ * big-endian machine turns them round. Read as they are, the demos gave the
+ * cars positions that are not numbers, and sorting the race order on them
+ * never ended (the title screen's demo hung the game). */
+bool save_float(FILE *fp, float f)
+{
+	unsigned char *p;
+	p = (unsigned char *) & f;
+	fputc(p[3], fp);
+	fputc(p[2], fp);
+	fputc(p[1], fp);
+	fputc(p[0], fp);
+
+	return true;
+} /* save_float */
+
+
+bool load_float(FILE *fp, float *f)
+{
+	unsigned char *p;
+	p = (unsigned char *)f;
+	p[3] = fgetc(fp);
+	p[2] = fgetc(fp);
+	p[1] = fgetc(fp);
+	p[0] = fgetc(fp);
+
+	return true;
+} /* load_float */
+
+
+bool save_int(FILE *fp, int f)
+{
+	unsigned char *p;
+	p = (unsigned char *) & f;
+	fputc(p[3], fp);
+	fputc(p[2], fp);
+	fputc(p[1], fp);
+	fputc(p[0], fp);
+
+	return true;
+} /* save_int */
+
+
+bool load_int(FILE *fp, int *f)
+{
+	unsigned char *p;
+	p = (unsigned char *)f;
+	p[3] = fgetc(fp);
+	p[2] = fgetc(fp);
+	p[1] = fgetc(fp);
+	p[0] = fgetc(fp);
+
+	return true;
+} /* load_int */
+#else
 bool save_float(FILE *fp, float f)
 {
 	unsigned char *p;
@@ -1787,3 +1844,4 @@ bool load_int(FILE *fp, int *f)
 
 	return true;
 } /* load_int */
+#endif
