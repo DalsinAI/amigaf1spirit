@@ -36,6 +36,36 @@ class RainDrop
 };
 
 
+#ifdef __amigaos__
+/* AmiCradle: the rain drops in arrays rather than a list of objects, in the
+ * order upstream's list keeps them (weather.cpp). A drop with z >= 400 has
+ * ended and is skipped (and dropped from the arrays the next cycle). The
+ * speeds are always 2, 2, 20. */
+class RainDrops
+{
+
+	public:
+		RainDrops() {
+			x = y = z = 0;
+			ended = 0;
+			n = room = 0;
+		};
+
+		~RainDrops() {
+			delete []x;
+			delete []y;
+			delete []z;
+			delete []ended;
+		};
+
+		bool grow(int want);
+
+		float *x, *y, *z;
+		int *ended;	/* this cycle's ended drops, by index */
+		int n, room;
+};
+#endif
+
 class F1SpiritGame
 {
 
@@ -192,6 +222,9 @@ class F1SpiritGame
 
 		// rain:
 		List<RainDrop> m_rain_drops;
+#ifdef __amigaos__
+		RainDrops m_rain;
+#endif
 
 		/* GAME PARAMETERS: */
 		F1S_GParameters parameters;

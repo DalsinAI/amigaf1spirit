@@ -132,6 +132,19 @@ void glb_line(float x1, float y1, float z1, float x2, float y2, float z2, float 
 	put(p2, 0, c);
 }
 
+GLfloat *glb_reserve(GLenum m, GLuint tex, int n, GLfloat **c)
+{
+	GLfloat *p;
+
+	if (!start(m, tex, n))
+		return 0;
+
+	p = pos + count * 3;
+	*c = col + count * 4;
+	count += n;
+	return p;
+}
+
 /* What this file has set in GL during a batch: set once, not at every
  * flush (each GL call costs on the 68k). */
 static bool in_batch = false;
