@@ -8,9 +8,9 @@ fc1778dcec68ccd31b9da893abee67e64a7931a34c75a63f8563355b810acbd7) for
 AmigaOS 3.2 on a 68040 or 68060 with an FPU and an RTG screen, on
 GFOpenGPU's SDL 1.2 (sdl12-compat on SDL 2) and OpenGL.
 
-Status: test build. It starts, the menus work and a race starts and
-runs in the AmiCradle lab, but the race runs far below full speed (see
-"Known limits"), so it is not playable yet.
+Status: test build. It starts, the menus work, and a race runs and can
+be driven in the AmiCradle lab, at 60 to 95 per cent of full speed on a
+busy host (see "Speed").
 
 
 What you need
@@ -115,22 +115,99 @@ them:
   every message, even from the audio callback, which stalled the game).
 - amiga/Makefile.amigaos links SDL 1.2's OpenGL as sdl-config --gl
   does (-Wl,-u,_SDL12Amiga_gl).
+- amiga/glbatch.cpp/h, sources/track.cpp, RoadPiece.cpp, GLTile.cpp/h,
+  RotatedGLTile.cpp, weather.cpp, F1SpiritGame.cpp: the race is drawn
+  with a few dozen glDrawArrays a frame rather than some 20,000
+  glBegin/glEnd pairs, and what is off the screen is not drawn (see
+  "Speed").
 
 Big-endian: the images are read through stb_image into bytes in R, G,
 B, A order, the order the game's masks give on a big-endian machine;
 the tracks, players and replays are text or byte files.
 
 
+Speed
+-----
+
+The game runs 50 cycles a second and draws when it can; when drawing
+falls behind it runs up to ten cycles between two frames, and past
+200 ms behind it lets the clock go. So a slow frame slows the race
+itself, not only the picture.
+
+Measured in the lab (a copy of Instance-32, 68040 on the AmiCradle
+runtime, GL.module on the PC's graphics chip through virgl), 6 November
+2026, on the Stock track in the rain, with a timing build that counted
+the GL calls and timed the game cycle, the drawing and
+SDL_GL_SwapBuffers apart:
+
+| | before | after |
+| --- | --- | --- |
+| glBegin/glEnd a frame | 8,000 to 20,000 | 4 |
+| glBindTexture a frame | 3,960 | about 32 |
+| glEnable/glDisable a frame | 6,030 | 29 |
+| glDrawArrays a frame | 0 | about 31 (22,600 points) |
+| drawing a frame | 930 to 1,460 ms | 27 to 60 ms (most 5 s windows) |
+| SDL_GL_SwapBuffers | 3 to 15 ms | 4 to 12 ms |
+| game cycles in 5 s (250 is full speed) | 3 to 7 | 74 to 260 (mostly 150 to 240) |
+
+Before, a frame drew some 20,000 quads one glBegin/glEnd at a time
+(a minute into a race: tyre marks build up, and heavy rain is some
+20,000 drops), each with its own glPushMatrix, glTranslatef,
+glRotatef, glBindTexture, glColor4f and glNormal3f. Each GL call goes
+through libGL.a into Mesa on the 68k, and each sprite with its own
+matrix is a draw of its own in Mesa: about 50 to 80 microseconds a
+quad. The game logic took 3 to 9 ms a cycle and the swap a few ms; the
+drawing took the rest (so the earlier sound-off build was as slow).
+
+Now:
+
+- track.cpp: tyre marks, scenery, cars and clouds are tested against
+  the view's four side planes (glbatch.h's CullPlanes, from the
+  projection and modelview matrices as they are when the track is
+  drawn) and only what can reach the screen is drawn. Upstream drew
+  every car, cloud and tyre mark on the track.
+- amiga/glbatch.cpp: sprites (GLTile, RotatedGLTile), road strips,
+  tyre marks, rain, the HUD and the minimap are worked out on the CPU
+  (the sprite's own translate, turn and scale) and collected into
+  vertex arrays; one glDrawArrays draws each run with one texture, in
+  the order upstream drew them. Small sprite pictures (up to 256x256)
+  are copied, the second time they are drawn, into 512x512 atlas
+  textures, so most sprites share a texture and a run. A road piece
+  sends its road, its two sides and its lines as four runs. Coloured
+  sprites turned about y are drawn as before: their lighting depends
+  on the turn. The colours go as floats: GL.module on virgl turns
+  byte colours into floats on the 68k at every draw, which halved
+  glDrawArrays' time when it went (5.7 to 6.2 ms a frame down to 2.6
+  to 3.7 ms in the lab's quieter windows).
+- weather.cpp: rain drops off the screen are skipped; the splashes
+  and the falling drops are two draws.
+
+The picture is the same as before as far as the lab's screenshots
+show (cars, crowd, trees, signs, tyre marks, rain, HUD, minimap).
+
+With the drawing at 30 to 60 ms the game cycle is now the larger part:
+with all 54 cars racing, 10 to 30 ms a cycle in the lab, mostly
+CRoadPiece::get_path_position (the cars finding their place on the
+road, about 10 per cent of the emulated CPU's time) and
+F1SpiritGame::cycle_rain (moving some 20,000 rain drops, about 9 per
+cent). The lab's host was heavily loaded during these runs (load
+average 90 to 135 on 12 threads, against 25 for the "before" run), and
+the emulation thread got only 35 to 55 per cent of a host CPU, against
+75 to 83 per cent before; the race ran at 30 to 100 per cent of full
+speed, mostly 60 to 95. On a quieter host it should come close to full
+speed; that is not measured yet.
+
+What is left in the drawing is mostly the port's own work on the CPU
+(placing 22,600 points a frame, most of them rain) and GL.module's
+handling of the arrays (2.6 ms a frame and up).
+
+
 Known limits
 ------------
 
-- Speed: everything is drawn with OpenGL, every frame. In the lab the
-  title and menus draw at a few frames a second and answer the keys,
-  but in a race a frame takes up to a second or more, and the race
-  clock moved about one second in two to three minutes. The race is
-  not playable at this speed. Where the time goes (GL.module's drawing
-  of the many textured quads, or the game itself) is still to be
-  measured.
+- Speed: see "Speed". On a busy host the race can still fall below
+  full speed, mostly in the game's own logic for 54 cars and heavy
+  rain.
 - No network play and no on-line hi-scores (see above).
 - The lab is muted, so the sound and music have not been heard.
 
@@ -160,3 +237,11 @@ RTG; muted), 5 November 2026, with the build from a clean checkout:
 - The window's close gadget quit to the Workbench with no screen left
   behind. Right Amiga+Q quit from the title screen, and
   User/f1spirit.cfg was written.
+
+6 November 2026, the same lab, with the speed changes: Practice, the
+Stock track, a race in the rain; the cars, crowd, trees, signs, tyre
+marks, rain, HUD and minimap drew as before, the lap clock ran at about three quarters of real time on the busy
+host, and the car was driven (Space held: it reached 218 km/h; the
+cursor keys steered it; Escape paused the race). The track preview in the menus was drawn
+in 30 to 40 ms rather than 290 to 390 ms. Right Amiga+Q quit from the
+race.
