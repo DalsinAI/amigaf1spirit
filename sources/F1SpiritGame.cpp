@@ -44,6 +44,9 @@
 #include "filehandling.h"
 
 #include "debug.h"
+#ifdef __amigaos__
+#include "glbatch.h"
+#endif
 
 #ifdef KITSCHY_DEBUG_MEMORY
 #include "debug_memorymanager.h"
@@ -3788,11 +3791,22 @@ void F1SpiritGame::draw(bool draw_scoreboard)
 
 		/* Scoreboard: */
 		if (draw_scoreboard) {
+#ifdef __amigaos__
+			/* AmiCradle: its tiles in a few glDrawArrays (amiga/glbatch.h) */
+			glb_active = true;
+			glb_begin();
+#endif
+
 			if (player_cars.Length() > 1) {
 				draw_mini_dispersed_hud(v);
 			} else {
 				draw_dispersed_hud(v);
 			} 
+
+#ifdef __amigaos__
+			glb_end();
+			glb_active = false;
+#endif
 		} 
 
 	} // while
@@ -3803,6 +3817,12 @@ void F1SpiritGame::draw(bool draw_scoreboard)
 	if (draw_scoreboard) {
 		int mini_x = 640 - 214, mini_y = 18 + 48;
 		float alpha = 0.5F;
+
+#ifdef __amigaos__
+		/* AmiCradle: the map and its 54 cars in a few glDrawArrays */
+		glb_active = true;
+		glb_begin();
+#endif
 
 		if (player_cars.Length() > 1) {
 			mini_x = 320 - (race_minitrack->get_dx()) / 2;
@@ -3920,6 +3940,11 @@ void F1SpiritGame::draw(bool draw_scoreboard)
 				} 
 			} 
 		} 
+
+#ifdef __amigaos__
+		glb_end();
+		glb_active = false;
+#endif
 	} 
 
 	if (race_state == 0) {

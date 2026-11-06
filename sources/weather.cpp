@@ -43,6 +43,9 @@
 #include "randomc.h"
 
 #include "debug.h"
+#ifdef __amigaos__
+#include "glbatch.h"
+#endif
 
 #ifdef KITSCHY_DEBUG_MEMORY
 #include "debug_memorymanager.h"
@@ -290,6 +293,70 @@ void F1SpiritGame::draw_rain(PlayerCCar *v, float rain_strength)
 
 	glNormal3f(0.0, 0.0, 1.0);
 
+#ifdef __amigaos__
+	/* AmiCradle: the drops on the screen only (they fall over a square
+	 * 1400 pixels across round the car), in two glDrawArrays calls rather
+	 * than a glBegin/glEnd each (amiga/glbatch.h): heavy rain starts 800
+	 * drops a cycle, some 20,000 drops and splashes at once. The splashes on the ground go first and
+	 * the falling drops over them, rather than mixed in the list's order. */
+	{
+		CullPlanes cull;
+		int pass;
+
+		cull_setup(&cull);
+		glb_begin();
+
+		for (pass = 0;pass < 2;pass++) {
+			m_rain_drops.Rewind();
+
+			while (m_rain_drops.Iterate(rd)) {
+				float px = rd->x - v->c_x, py = rd->y - v->c_y;
+
+				if (rd->z < 0) {
+					if (pass == 0 || !cull_visible(&cull, px, py, rd->z, 64))
+						continue;
+
+					glb_line(px, py, rd->z,
+					         rd->x - rd->inc_x*2 - v->c_old_x, rd->y - rd->inc_y*2 - v->c_old_y, rd->z - rd->inc_z*2,
+					         0.75f, 0.75f, 1.0f, 0.5f);
+				} else {
+					float fan[6][3], tri[9];
+					int i;
+
+					if (pass == 1 || !cull_visible(&cull, px, py, 0, 4))
+						continue;
+
+					f = rd->z / 500.0f;
+					v1 = 0.5f * (f + 0.5f);
+					v2 = 1.5f * (f + 0.5f);
+					f = (1.0f - f) * 0.5f;
+
+					fan[0][0] = px;      fan[0][1] = py - v2;
+					fan[1][0] = px + v2; fan[1][1] = py - v1;
+					fan[2][0] = px + v2; fan[2][1] = py + v1;
+					fan[3][0] = px;      fan[3][1] = py + v2;
+					fan[4][0] = px - v2; fan[4][1] = py + v1;
+					fan[5][0] = px - v2; fan[5][1] = py - v1;
+
+					for (i = 0;i < 6;i++)
+						fan[i][2] = 0;
+
+					/* the fan as four triangles */
+					for (i = 1;i < 5;i++) {
+						memcpy(tri, fan[0], sizeof(fan[0]));
+						memcpy(tri + 3, fan[i], sizeof(fan[0]));
+						memcpy(tri + 6, fan[i + 1], sizeof(fan[0]));
+						glb_tri(0, tri, 0, 0.05f, 0.05f, 0.1f, f);
+					} 
+				} 
+			} 
+
+			glb_flush();
+		} 
+
+		glb_end();
+	}
+#else
 	m_rain_drops.Rewind();
 
 	while (m_rain_drops.Iterate(rd)) {
@@ -322,6 +389,7 @@ void F1SpiritGame::draw_rain(PlayerCCar *v, float rain_strength)
 			glEnd();
 		} // if
 	} // while
+#endif
 
 	glPopMatrix();
 

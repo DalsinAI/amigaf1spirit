@@ -66,6 +66,15 @@ void CRotatedGLTile::draw(void)
 void CRotatedGLTile::draw(float dx, float dy, float dz, float pangle, float zoom)
 {
 	if (tile != 0) {
+#ifdef __amigaos__
+		/* As below: the turn about z only when angle1 is not 0. Batched
+		 * only in white: the race's lighting (ambient 1) makes a white tile
+		 * white whichever way its normal turns, but not a coloured one. */
+		if (angle2 != 0 && !different_color &&
+		        tile->batch(1, 1, 1, 1, x + dx, y + dy, z + dz, angle1 != 0 ? angle1 + pangle : 0, angle2, zoom))
+			return;
+
+#endif
 		if (angle2 != 0) {
 			glPushMatrix();
 			glTranslatef(x + dx, y + dy, z + dz);

@@ -20,6 +20,9 @@
 
 #include "auxiliar.h"
 #include "RoadPiece.h"
+#ifdef __amigaos__
+#include "glbatch.h"
+#endif
 
 #ifdef KITSCHY_DEBUG_MEMORY
 #include "debug_memorymanager.h"
@@ -296,6 +299,88 @@ void CRoadPiece::draw(float orig_x, float orig_y)
 } 
 
 
+/* One textured quad of the road: x, y, z, s, t for each corner, in
+ * glBegin(GL_QUADS)'s order. AmiCradle: into amiga/glbatch's arrays while
+ * the track batches (a glBegin/glEnd each was some 2,000 a frame). A
+ * piece's road, its two sides and its lines are kept apart (bin 0 to 3)
+ * and go out in that order when the piece is done, so that each is a run
+ * with one texture: the road's strips don't overlap each other or the
+ * sides, and the lines go over the road as before. */
+#ifdef __amigaos__
+static bool rp_batch = false;
+static float rp_ox = 0, rp_oy = 0;
+
+struct RPQuad {
+	GLuint tex;
+	float xyz[12], st[8];
+};
+
+#define RP_BINS 4
+static RPQuad *rp_bin[RP_BINS];
+static int rp_bin_n[RP_BINS], rp_bin_room[RP_BINS];
+
+static void rp_bins_out(void)
+{
+	int b, i;
+
+	for (b = 0;b < RP_BINS;b++) {
+		for (i = 0;i < rp_bin_n[b];i++)
+			glb_quad(rp_bin[b][i].tex, rp_bin[b][i].xyz, rp_bin[b][i].st, 1, 1, 1, 1);
+
+		rp_bin_n[b] = 0;
+	} 
+} 
+#endif
+
+static void rp_quad(int bin, GLuint tex, const float v[4][5])
+{
+	int i;
+#ifdef __amigaos__
+
+	if (rp_batch) {
+		RPQuad *q;
+
+		if (rp_bin_n[bin] == rp_bin_room[bin]) {
+			int room = rp_bin_room[bin] ? rp_bin_room[bin] * 2 : 256;
+			RPQuad *nb = (RPQuad *)realloc(rp_bin[bin], room * sizeof(RPQuad));
+
+			if (nb == 0) {
+				rp_bins_out();
+			} else {
+				rp_bin[bin] = nb;
+				rp_bin_room[bin] = room;
+			}
+		}
+
+		if (rp_bin_n[bin] < rp_bin_room[bin]) {
+			q = &rp_bin[bin][rp_bin_n[bin]++];
+			q->tex = tex;
+
+			for (i = 0;i < 4;i++) {
+				q->xyz[i * 3] = v[i][0] + rp_ox;
+				q->xyz[i * 3 + 1] = v[i][1] + rp_oy;
+				q->xyz[i * 3 + 2] = v[i][2];
+				q->st[i * 2] = v[i][3];
+				q->st[i * 2 + 1] = v[i][4];
+			} 
+		}
+
+		return;
+	} 
+
+#endif
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glBegin(GL_QUADS);
+
+	for (i = 0;i < 4;i++) {
+		glTexCoord2f(v[i][3], v[i][4]);
+		glVertex3f(v[i][0], v[i][1], v[i][2]);
+	} 
+
+	glEnd();
+} 
+
+
 void CRoadPiece::draw(float offs, int n_textures, GLuint *textures, int n_ltextures, GLuint *ltextures, int n_rtextures, GLuint *rtextures, GLuint line_texture)
 {
 	if (r_x1 == 0)
@@ -311,10 +396,16 @@ void CRoadPiece::draw(float offs, int n_textures, GLuint *textures, int n_ltextu
 		float n_lines_tmp1, n_lines_tmp2;
 		float r_width, r_width_inc;
 
+#ifdef __amigaos__
+		if (!rp_batch) {
+#endif
 		glEnable(GL_COLOR_MATERIAL);
 		glEnable(GL_TEXTURE_2D);
 
 		glColor4f(1, 1, 1, 1.0);
+#ifdef __amigaos__
+		} 
+#endif
 		n_lines = float(nlines2);
 		n_lines_inc = float(nlines1 - nlines2) / steps;
 		r_width = w1;
@@ -340,20 +431,13 @@ void CRoadPiece::draw(float offs, int n_textures, GLuint *textures, int n_ltextu
 			}
 
 			if (textures != 0) {
-				glBindTexture(GL_TEXTURE_2D, textures[j]);
-				glBegin(GL_QUADS);
-				glTexCoord2f(0, -pos / 128.0F);
-				glVertex3f(r_x1[i], r_y1[i], r_z[i]);
-
-				glTexCoord2f(0.75, -pos / 128.0F);
-				glVertex3f(r_x2[i], r_y2[i], r_z[i]);
-
-				glTexCoord2f(0.75, -(pos + inc) / 128.0F);
-				glVertex3f(r_x2[i + 1], r_y2[i + 1], r_z[i + 1]);
-
-				glTexCoord2f(0, -(pos + inc) / 128.0F);
-				glVertex3f(r_x1[i + 1], r_y1[i + 1], r_z[i + 1]);
-				glEnd();
+				{
+					const float q[4][5] = { { r_x1[i], r_y1[i], r_z[i], 0, -pos / 128.0F },
+					                       { r_x2[i], r_y2[i], r_z[i], 0.75, -pos / 128.0F },
+					                       { r_x2[i + 1], r_y2[i + 1], r_z[i + 1], 0.75, -(pos + inc) / 128.0F },
+					                       { r_x1[i + 1], r_y1[i + 1], r_z[i + 1], 0, -(pos + inc) / 128.0F } };
+					rp_quad(0, textures[j], q);
+				}
 			} 
 
 			if (r_cx1 != 0) {
@@ -366,21 +450,13 @@ void CRoadPiece::draw(float offs, int n_textures, GLuint *textures, int n_ltextu
 					lj = n_ltextures - 1;
 
 				if (ltextures != 0) {
-					glBindTexture(GL_TEXTURE_2D, ltextures[lj]);
-
-					glBegin(GL_QUADS);
-					glTexCoord2f(0, -pos / 128.0F);
-					glVertex3f(r_cx1[i], r_cy1[i], r_z[i]);
-
-					glTexCoord2f(1, -pos / 128.0F);
-					glVertex3f(r_x1[i], r_y1[i], r_z[i]);
-
-					glTexCoord2f(1, -(pos + inc) / 128.0F);
-					glVertex3f(r_x1[i + 1], r_y1[i + 1], r_z[i + 1]);
-
-					glTexCoord2f(0, -(pos + inc) / 128.0F);
-					glVertex3f(r_cx1[i + 1], r_cy1[i + 1], r_z[i + 1]);
-					glEnd();
+					{
+						const float q[4][5] = { { r_cx1[i], r_cy1[i], r_z[i], 0, -pos / 128.0F },
+						                       { r_x1[i], r_y1[i], r_z[i], 1, -pos / 128.0F },
+						                       { r_x1[i + 1], r_y1[i + 1], r_z[i + 1], 1, -(pos + inc) / 128.0F },
+						                       { r_cx1[i + 1], r_cy1[i + 1], r_z[i + 1], 0, -(pos + inc) / 128.0F } };
+						rp_quad(1, ltextures[lj], q);
+					}
 				} 
 			} 
 
@@ -394,21 +470,13 @@ void CRoadPiece::draw(float offs, int n_textures, GLuint *textures, int n_ltextu
 					rj = n_rtextures - 1;
 
 				if (rtextures != 0) {
-					glBindTexture(GL_TEXTURE_2D, rtextures[rj]);
-
-					glBegin(GL_QUADS);
-					glTexCoord2f(0, -pos / 128.0F);
-					glVertex3f(r_cx2[i], r_cy2[i], r_z[i]);
-
-					glTexCoord2f(1, -pos / 128.0F);
-					glVertex3f(r_x2[i], r_y2[i], r_z[i]);
-
-					glTexCoord2f(1, -(pos + inc) / 128.0F);
-					glVertex3f(r_x2[i + 1], r_y2[i + 1], r_z[i + 1]);
-
-					glTexCoord2f(0, -(pos + inc) / 128.0F);
-					glVertex3f(r_cx2[i + 1], r_cy2[i + 1], r_z[i + 1]);
-					glEnd();
+					{
+						const float q[4][5] = { { r_cx2[i], r_cy2[i], r_z[i], 0, -pos / 128.0F },
+						                       { r_x2[i], r_y2[i], r_z[i], 1, -pos / 128.0F },
+						                       { r_x2[i + 1], r_y2[i + 1], r_z[i + 1], 1, -(pos + inc) / 128.0F },
+						                       { r_cx2[i + 1], r_cy2[i + 1], r_z[i + 1], 0, -(pos + inc) / 128.0F } };
+						rp_quad(2, rtextures[rj], q);
+					}
 				} 
 			} 
 
@@ -458,20 +526,13 @@ void CRoadPiece::draw(float offs, int n_textures, GLuint *textures, int n_ltextu
 						next_lx2 = r_x1[i + 1] * (line_start2 + line_width2) + r_x2[i + 1] * (1.0F - (line_start2 + line_width2));
 						next_ly2 = r_y1[i + 1] * (line_start2 + line_width2) + r_y2[i + 1] * (1.0F - (line_start2 + line_width2));
 
-						glBindTexture(GL_TEXTURE_2D, line_texture);
-						glBegin(GL_QUADS);
-						glTexCoord2f(0, -pos / 128.0F);
-						glVertex3f(lx1, ly1, r_z[i]);
-
-						glTexCoord2f(1.0F / 32.0F, -pos / 128.0F);
-						glVertex3f(lx2, ly2, r_z[i]);
-
-						glTexCoord2f(1.0F / 32.0F, -(pos + inc) / 128.0F);
-						glVertex3f(next_lx2, next_ly2, r_z[i + 1]);
-
-						glTexCoord2f(0, -(pos + inc) / 128.0F);
-						glVertex3f(next_lx1, next_ly1, r_z[i + 1]);
-						glEnd();
+						{
+							const float q[4][5] = { { lx1, ly1, r_z[i], 0, -pos / 128.0F },
+							                       { lx2, ly2, r_z[i], 1.0F / 32.0F, -pos / 128.0F },
+							                       { next_lx2, next_ly2, r_z[i + 1], 1.0F / 32.0F, -(pos + inc) / 128.0F },
+							                       { next_lx1, next_ly1, r_z[i + 1], 0, -(pos + inc) / 128.0F } };
+							rp_quad(3, line_texture, q);
+						}
 
 					} 
 
@@ -488,6 +549,9 @@ void CRoadPiece::draw(float offs, int n_textures, GLuint *textures, int n_ltextu
 		} 
 
 
+#ifdef __amigaos__
+		if (!rp_batch)
+#endif
 		glDisable(GL_TEXTURE_2D);
 
 	} 
@@ -496,6 +560,18 @@ void CRoadPiece::draw(float offs, int n_textures, GLuint *textures, int n_ltextu
 
 void CRoadPiece::draw(float orig_x, float orig_y, float offs, int n_textures, GLuint *textures, int n_ltextures, GLuint *ltextures, int n_rtextures, GLuint *rtextures, GLuint line_texture)
 {
+#ifdef __amigaos__
+	if (glb_active) {
+		rp_batch = true;
+		rp_ox = orig_x;
+		rp_oy = orig_y;
+		draw(offs, n_textures, textures, n_ltextures, ltextures, n_rtextures, rtextures, line_texture);
+		rp_batch = false;
+		rp_bins_out();
+		return;
+	} 
+
+#endif
 	glPushMatrix();
 	glTranslatef(orig_x, orig_y, 0);
 

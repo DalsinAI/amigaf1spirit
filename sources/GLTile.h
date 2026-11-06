@@ -41,6 +41,13 @@ class GLTile
 		void draw(float r, float g, float b, float a);
 		void draw(float r, float g, float b, float a, float x, float y, float z, float angle, float scale);
 
+#ifdef __amigaos__
+		/* AmiCradle: into amiga/glbatch's arrays while glb_active is set
+		 * (false when it isn't): the tile turned angle_y about y, then
+		 * angle_z about z, scaled, placed at x, y, z. */
+		bool batch(float r, float g, float b, float a, float x, float y, float z, float angle_z, float angle_y, float scale);
+#endif
+
 		void draw_cmc(void);
 		void draw_cmc(float dx, float dy, float dz, float angle, float zoom);
 		void draw_cmc(float r, float g, float b, float a);
@@ -113,6 +120,18 @@ class GLTile
 		GLuint *tex;
 
 		class C2DCMC *cmc;
+
+#ifdef __amigaos__
+		/* AmiCradle: where each part sits in amiga/glbatch's atlas */
+		struct Atlas {
+			int gen, uses;
+			int *page;
+			float *uv;
+		} *atlas;
+
+		void atlas_place(void);
+		void atlas_free(void);
+#endif
 };
 
 
