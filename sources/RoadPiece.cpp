@@ -55,6 +55,10 @@ CRoadPiece::CRoadPiece(void)
 
 	path_points = 0;
 	path_x = 0;
+#ifdef __amigaos__
+	path_step_of = 0;
+	path_step = 0;
+#endif
 	path_y = 0;
 	path_z = 0;
 	path_a = 0;
@@ -97,6 +101,10 @@ CRoadPiece::CRoadPiece(float x, float y, float z)
 
 	path_points = 0;
 	path_x = 0;
+#ifdef __amigaos__
+	path_step_of = 0;
+	path_step = 0;
+#endif
 	path_y = 0;
 	path_z = 0;
 	path_a = 0;
@@ -136,6 +144,10 @@ CRoadPiece::CRoadPiece(FILE *fp)
 	path_points = 0;
 
 	path_x = 0;
+#ifdef __amigaos__
+	path_step_of = 0;
+	path_step = 0;
+#endif
 
 	path_y = 0;
 
@@ -179,6 +191,10 @@ CRoadPiece::~CRoadPiece()
 	delete []path_w;
 	path_points = 0;
 	path_x = 0;
+#ifdef __amigaos__
+	path_step_of = 0;
+	path_step = 0;
+#endif
 	path_y = 0;
 	path_z = 0;
 	path_a = 0;
@@ -231,6 +247,9 @@ void CRoadPiece::force_internal_draw(void)
 	delete []path_z;
 	delete []path_a;
 	delete []path_w;
+#ifdef __amigaos__
+	path_step_of = 0;	/* the new path may come at the same address */
+#endif
 	r_x1 = r_y1 = 0;
 	r_x2 = r_y2 = 0;
 	r_z = 0;
@@ -839,7 +858,7 @@ void CRoadPiece::draw_circular_adapted(void)
 
 	center[1] /= ndata;
 
-	/* calcular el ángulo inicial, el ángulo final y la dirección: */
+	/* calcular el ï¿½ngulo inicial, el ï¿½ngulo final y la direcciï¿½n: */
 	float ta1 = atan2f(y1 - center[1], x1 - center[0]);
 
 	float ta2 = atan2f(y2 - center[1], x2 - center[0]);
@@ -1118,6 +1137,75 @@ bool CRoadPiece::inside_test(C2DCMC *cmc)
 } 
 
 
+#ifdef __amigaos__
+/* AmiCradle: the path point nearest (x, y), the same one upstream's loop
+ * over every point finds, for a fraction of the work: cars look for their
+ * place on the road many times a cycle (some 10 per cent of a rainy race's
+ * time on a 68040 went in that loop). The points are at most path_step
+ * apart along the path, so a point at distance r from (x, y) has no point
+ * nearer than r - k * path_step among the next k: those that can't come
+ * nearer than the nearest so far (with a pixel to spare) are skipped. The
+ * distances are worked out exactly as upstream's loop does (in the FPU's
+ * extended precision, which is what GCC keeps them in there), so that ties
+ * and near ties go the same way. */
+float CRoadPiece::path_max_step(void)
+{
+	int i;
+	double m = 0;
+
+	if (path_step_of == path_x)
+		return path_step;
+
+	for (i = 0;i < path_points - 1;i++) {
+		double dx = double(path_x[i + 1]) - path_x[i];
+		double dy = double(path_y[i + 1]) - path_y[i];
+		double s = sqrt(dx * dx + dy * dy);
+
+		if (s > m)
+			m = s;
+	}
+
+	path_step = float(m * 1.0001 + 0.01);
+	path_step_of = path_x;
+	return path_step;
+}
+
+
+int CRoadPiece::closest_path_point(float x, float y)
+{
+	int closest = 0;
+	int i, n = path_points;
+	long double d, min_d = -1;
+	float r_min = 0, step = path_max_step();
+
+	for (i = 0;i < n;i++) {
+		long double dx = (long double)x - path_x[i];
+		long double dy = (long double)y - path_y[i];
+
+		d = dx * dx + dy * dy;
+
+		if (min_d == -1 || d < min_d) {
+			closest = i;
+			min_d = d;
+			r_min = float(sqrt(double(d)));
+		} else {
+			float gap = float(sqrt(double(d))) - r_min - (1.0f + r_min * (1.0f / 1024));
+
+			if (gap > step) {
+				float k = gap / step;
+
+				if (k >= float(n))
+					break;
+
+				i += int(k);
+			}
+		}
+	}
+
+	return closest;
+}
+#endif
+
 bool CRoadPiece::get_path_position(float x, float y, float *px, float *py, float *pz, float *pa, float *pw, float *distance)
 {
 	int closest = 0;
@@ -1126,6 +1214,9 @@ bool CRoadPiece::get_path_position(float x, float y, float *px, float *py, float
 	bool f1 = false, f2 = false;
 	float l1, l2;
 
+#ifdef __amigaos__
+	closest = closest_path_point(x, y);
+#else
 	for (i = 0;i < path_points;i++) {
 		d = (x - path_x[i]) * (x - path_x[i]) + (y - path_y[i]) * (y - path_y[i]);
 
@@ -1135,6 +1226,7 @@ bool CRoadPiece::get_path_position(float x, float y, float *px, float *py, float
 			min_d = d;
 		} 
 	} 
+#endif
 
 	/* test the position in the interval: closest -> closest+1 */
 	if (closest < path_points - 1) {
@@ -1272,6 +1364,9 @@ bool CRoadPiece::distance_to_road(float x, float y, float *distance)
 	float l1, l2;
 	float px, py, pw;
 
+#ifdef __amigaos__
+	closest = closest_path_point(x, y);
+#else
 	for (i = 0;i < path_points;i++) {
 		d = (x - path_x[i]) * (x - path_x[i]) + (y - path_y[i]) * (y - path_y[i]);
 
@@ -1281,6 +1376,7 @@ bool CRoadPiece::distance_to_road(float x, float y, float *distance)
 			min_d = d;
 		} 
 	} 
+#endif
 
 	/* test the position in the interval: closest -> closest+1 */
 	if (closest < path_points - 1) {
@@ -1430,6 +1526,9 @@ bool CRoadPiece::offset_from_road_center(float x, float y, float *offset, float 
 	float l1, l2;
 	float px, py, pa;
 
+#ifdef __amigaos__
+	closest = closest_path_point(x, y);
+#else
 	for (i = 0;i < path_points;i++) {
 		d = (x - path_x[i]) * (x - path_x[i]) + (y - path_y[i]) * (y - path_y[i]);
 
@@ -1439,6 +1538,7 @@ bool CRoadPiece::offset_from_road_center(float x, float y, float *offset, float 
 			min_d = d;
 		} 
 	} 
+#endif
 
 	/* test the position in the interval: closest -> closest+1 */
 	if (closest < path_points - 1) {
