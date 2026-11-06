@@ -862,7 +862,7 @@ void CRoadPiece::draw_circular_adapted(void)
 
 	center[1] /= ndata;
 
-	/* calcular el ï¿½ngulo inicial, el ï¿½ngulo final y la direcciï¿½n: */
+	/* calcular el ángulo inicial, el ángulo final y la dirección: */
 	float ta1 = atan2f(y1 - center[1], x1 - center[0]);
 
 	float ta2 = atan2f(y2 - center[1], x2 - center[0]);
