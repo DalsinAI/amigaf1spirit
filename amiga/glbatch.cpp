@@ -14,14 +14,17 @@ static GLenum mode = GL_TRIANGLES;
 static GLuint texture = 0;
 static int count = 0, room = 0;
 static GLfloat *pos = 0, *st = 0;
-static GLubyte *col = 0;
-static GLubyte last_col[4] = { 255, 255, 255, 255 };
+/* Colours as floats, not bytes: GL.module on virgl on a big-endian CPU
+ * converts byte colours to floats on the 68k at every draw (its Mesa patch
+ * 0011, u_vbuf), which cost more than sending floats. */
+static GLfloat *col = 0;
+static GLfloat last_col[4] = { 1, 1, 1, 1 };
 
 static bool grow(int n)
 {
 	int want;
 	GLfloat *p, *t;
-	GLubyte *c;
+	GLfloat *c;
 
 	if (count + n <= room)
 		return true;
@@ -35,7 +38,7 @@ static bool grow(int n)
 	if (p) pos = p;
 	t = (GLfloat *)realloc(st, want * 2 * sizeof(GLfloat));
 	if (t) st = t;
-	c = (GLubyte *)realloc(col, want * 4);
+	c = (GLfloat *)realloc(col, want * 4 * sizeof(GLfloat));
 	if (c) col = c;
 
 	if (!p || !t || !c)
@@ -45,11 +48,11 @@ static bool grow(int n)
 	return true;
 }
 
-static inline GLubyte byte_of(float f)
+static inline GLfloat clamp01(float f)
 {
 	if (f <= 0) return 0;
-	if (f >= 1) return 255;
-	return (GLubyte)(f * 255.0F + 0.5F);
+	if (f >= 1) return 1;
+	return f;
 }
 
 /* Room for n more points of this kind; what was collected of another kind
@@ -70,10 +73,10 @@ static bool start(GLenum m, GLuint tex, int n)
 	return true;
 }
 
-static inline void put(const float *xyz, const float *t, const GLubyte *c)
+static inline void put(const float *xyz, const float *t, const GLfloat *c)
 {
 	GLfloat *p = pos + count * 3;
-	GLubyte *q = col + count * 4;
+	GLfloat *q = col + count * 4;
 
 	p[0] = xyz[0];
 	p[1] = xyz[1];
@@ -93,7 +96,7 @@ static inline void put(const float *xyz, const float *t, const GLubyte *c)
 
 void glb_tri(GLuint tex, const float *xyz, const float *t, float r, float g, float b, float a)
 {
-	GLubyte c[4] = { byte_of(r), byte_of(g), byte_of(b), byte_of(a) };
+	GLfloat c[4] = { clamp01(r), clamp01(g), clamp01(b), clamp01(a) };
 	int i;
 
 	if (!start(GL_TRIANGLES, tex, 3))
@@ -107,7 +110,7 @@ void glb_tri(GLuint tex, const float *xyz, const float *t, float r, float g, flo
 void glb_quad(GLuint tex, const float *xyz, const float *t, float r, float g, float b, float a)
 {
 	static const int order[6] = { 0, 1, 2, 0, 2, 3 };
-	GLubyte c[4] = { byte_of(r), byte_of(g), byte_of(b), byte_of(a) };
+	GLfloat c[4] = { clamp01(r), clamp01(g), clamp01(b), clamp01(a) };
 	int i;
 
 	if (!start(GL_TRIANGLES, tex, 6))
@@ -119,7 +122,7 @@ void glb_quad(GLuint tex, const float *xyz, const float *t, float r, float g, fl
 
 void glb_line(float x1, float y1, float z1, float x2, float y2, float z2, float r, float g, float b, float a)
 {
-	GLubyte c[4] = { byte_of(r), byte_of(g), byte_of(b), byte_of(a) };
+	GLfloat c[4] = { clamp01(r), clamp01(g), clamp01(b), clamp01(a) };
 	float p1[3] = { x1, y1, z1 }, p2[3] = { x2, y2, z2 };
 
 	if (!start(GL_LINES, 0, 2))
@@ -174,7 +177,7 @@ void glb_end(void)
 
 	/* The current colour after a colour array is undefined: leave the last
 	 * one, as the glColor4f calls drawn one by one would have. */
-	glColor4ub(last_col[0], last_col[1], last_col[2], last_col[3]);
+	glColor4f(last_col[0], last_col[1], last_col[2], last_col[3]);
 }
 
 void glb_flush(void)
@@ -213,13 +216,13 @@ void glb_flush(void)
 	}
 
 	if (set_col != col) {
-		glColorPointer(4, GL_UNSIGNED_BYTE, 0, col);
+		glColorPointer(4, GL_FLOAT, 0, col);
 		set_col = col;
 	}
 
 	glDrawArrays(mode, 0, count);
 
-	memcpy(last_col, col + (count - 1) * 4, 4);
+	memcpy(last_col, col + (count - 1) * 4, sizeof(last_col));
 	glb_draws++;
 	glb_points += count;
 	count = 0;
