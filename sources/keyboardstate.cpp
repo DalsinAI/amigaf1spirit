@@ -17,6 +17,16 @@
 
 #define JOYSTICK_SIZE 12
 
+#ifdef __amigaos__
+static unsigned char pressed_since_cycle[SDLK_LAST];
+
+void KEYBOARDSTATE::press(int sym)
+{
+	if (sym > 0 && sym < SDLK_LAST)
+		pressed_since_cycle[sym] = 1;
+}
+#endif
+
 
 KEYBOARDSTATE::KEYBOARDSTATE(void)
 {
@@ -80,6 +90,12 @@ void KEYBOARDSTATE::cycle(void)
 	for (i = 0;i < SDLK_LAST;i++) {
 		old_keyboard[i] = keyboard[i];
 		keyboard[i] = k[i];
+#ifdef __amigaos__
+		if (pressed_since_cycle[i]) {
+			keyboard[i] = 1;
+			pressed_since_cycle[i] = 0;
+		}
+#endif
 	} 
 
 	if (n_joysticks > 0) {

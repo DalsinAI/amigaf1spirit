@@ -1,0 +1,106 @@
+# F-1 Spirit for AmigaOS 3.x, 68040/68060 + FPU, on GFOpenGPU's SDL 1.2
+# (sdl12-compat on SDL 2) and OpenGL (GL.module).
+#
+#   make -f amiga/Makefile.amigaos -j4 dist STOVE=/path/to/os32-gcc16-open6
+#
+# STOVE is the GFOpenAmigaGCC 16.2.0-open6 stove (prefix/ holds the
+# compiler, prefix/m68k-amigaos/ the GFOpenGPU 0.8 kit: libSDL.a with SDL
+# 2's link library inside, libSDL_gl.a, libGL.a). The kit has no SDL_image,
+# SDL_mixer or SDL_net for SDL 1.2, no GLU and no libcurl; amiga/include/
+# and amiga/*.c stand in for what the game uses of them (stb_image and
+# stb_vorbis do the decoding; there is no network play).
+#
+# Output: build/amigaos/f1spirit; 'dist' makes dist/F1Spirit/ (the
+# program, its graphics, sounds, tracks and demos, the ReadMe and the
+# licences, with GlowIcons), dist/F1Spirit.info and dist/Install-F1Spirit.
+
+STOVE   ?= $(HOME)/AmiCradle/stoves/os32-gcc16-open6
+PREFIX  = $(STOVE)/prefix
+KIT     = $(PREFIX)/m68k-amigaos
+CC      = $(PREFIX)/bin/m68k-amigaos-gcc
+CXX     = $(PREFIX)/bin/m68k-amigaos-g++
+CPU     ?= -m68040 -m68881
+# -fno-tree-loop-distribute-patterns: GCC 16's loop miscompile.
+OPT     ?= -O2 -fomit-frame-pointer -fno-tree-loop-distribute-patterns
+
+BUILD   = build/amigaos
+OBJDIR  = $(BUILD)/obj
+PROG    = f1spirit
+DIST    = dist
+OUT     = $(DIST)/F1Spirit
+
+DEFS    = -D__amigaos__ -DNO_SDL_GLU -DHAVE_STRLWR
+INC     = -Iamiga/include -Iamiga -Isources -I$(KIT)/include/SDL -I$(KIT)/include
+CFLAGS  = -noixemul $(OPT) $(CPU) $(DEFS) $(INC) -MMD -MP
+CXXFLAGS = $(CFLAGS) -std=gnu++98 -Wno-write-strings -fpermissive
+LDFLAGS = -noixemul $(CPU) -Wl,-Map,$(BUILD)/$(PROG).map
+# sdl-config --libs --gl: -Wl,-u,_SDL12Amiga_gl pulls in SDL 1.2's OpenGL.
+LIBS    = -L$(KIT)/lib -Wl,-u,_SDL12Amiga_gl -lSDL_gl -lSDL -lGL -lm -lpthread
+
+# Upstream's build/linux/Makefile list, with F1Shttp.cpp (libcurl)
+# replaced by amiga/F1Shttp_amiga.cpp.
+SRC     = 2DCMC auxiliar CCar CPlayer debug EnemyCCar F1SComputer \
+          F1SpiritApp F1Spirit-auxiliar F1SpiritGame F1SpiritTrackViewer \
+          GameParameters geometrics GLTile GLtile-f1 keyboardstate main \
+          PlacedGLTile PlayerCCar RacingCCar ranrotb ReplayInfo RoadPiece \
+          RotatedGLTile SDL_glutaux sound state_disclaimer state_endsequence \
+          state_gameoptions state_gamestart state_hiscore state_konami \
+          state_menu state_menu_create_menu state_menu_draw state_race \
+          state_race_result state_replaymanager state_title state_trackload \
+          track Vector weather filehandling CarEngineSound
+OBJS    = $(SRC:%=$(OBJDIR)/sources/%.o) $(OBJDIR)/amiga/F1Shttp_amiga.o \
+          $(OBJDIR)/amiga/mixer.o $(OBJDIR)/amiga/image.o $(OBJDIR)/amiga/glu.o \
+          $(OBJDIR)/amiga/stb_vorbis.o $(OBJDIR)/amiga/amiga_sys.o
+
+ICONS   = amiga/icons/F1Spirit.info amiga/icons/ReadMe.info amiga/icons/Data.info \
+          amiga/icons/F1Spirit-drawer.info amiga/Install-F1Spirit amiga/Install-F1Spirit.info
+DATADIRS = demos graphics sound tracks
+
+all: $(BUILD)/$(PROG)
+
+$(BUILD)/$(PROG): $(OBJS) amiga/Makefile.amigaos
+	$(CXX) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
+
+$(OBJDIR)/sources/%.o: sources/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(OBJDIR)/amiga/%.o: amiga/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -Wall -c -o $@ $<
+
+$(OBJDIR)/amiga/stb_vorbis.o: amiga/stb_vorbis.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -DSTB_VORBIS_NO_PUSHDATA_API -c -o $@ $<
+
+$(OBJDIR)/amiga/%.o: amiga/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -Wall -c -o $@ $<
+
+# The drawer: the program, upstream's data as it is, User/ for the
+# settings, players, hi-scores and replays.
+dist: $(BUILD)/$(PROG) $(ICONS) AMIGA_PORT.md readme.txt amiga/Licences.txt
+	rm -rf $(OUT) && mkdir -p $(OUT)/User
+	cp $(BUILD)/$(PROG) $(OUT)/F1Spirit
+	for d in $(DATADIRS); do cp -r $$d $(OUT)/ ; done
+	cp AMIGA_PORT.md $(OUT)/ReadMe
+	cp readme.txt $(OUT)/ReadMe-f1spirit
+	cp amiga/COPYING $(OUT)/COPYING.txt
+	cp amiga/Licences.txt $(OUT)/Licences.txt
+	cp amiga/icons/F1Spirit.info amiga/icons/ReadMe.info $(OUT)/
+	for f in ReadMe-f1spirit COPYING.txt Licences.txt; do cp amiga/icons/ReadMe.info $(OUT)/$$f.info; done
+	for d in $(DATADIRS) User; do cp amiga/icons/Data.info $(OUT)/$$d.info; done
+	cp amiga/icons/F1Spirit-drawer.info $(DIST)/F1Spirit.info
+	cp amiga/Install-F1Spirit amiga/Install-F1Spirit.info $(DIST)/
+
+objs: $(OBJS)
+
+-include $(OBJS:.o=.d)
+
+clean:
+	rm -rf $(OBJDIR) $(BUILD)/$(PROG) $(BUILD)/$(PROG).map
+
+distclean:
+	rm -rf build $(DIST)
+
+.PHONY: all dist objs clean distclean

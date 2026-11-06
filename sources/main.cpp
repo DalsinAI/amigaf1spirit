@@ -79,6 +79,10 @@ char console_msg[80] = "";
 
 /*      AUXILIAR FUNCTION DEFINITION:       */
 
+#ifdef __amigaos__
+extern "C" void amiga_init(void);   /* amiga/amiga_sys.c */
+#endif
+
 
 SDL_Surface *initialization(int flags)
 {
@@ -265,6 +269,10 @@ int main(int argc, char** argv) {
 	bool quit = false;
 	bool need_to_redraw = true;
 
+#ifdef __amigaos__
+	amiga_init();
+#endif
+
 #ifdef F1SPIRIT_DEBUG_MESSAGES
 
 	output_debug_message("Application started\n");
@@ -315,6 +323,14 @@ int main(int argc, char** argv) {
 						quit = true;
 					} 
 
+#endif
+#ifdef __amigaos__
+					/* Right Amiga+Q quits, as in the other Amiga ports. The
+					   event's own modifiers: a slow frame drains the events
+					   late, when the Amiga key may be up already. */
+					if (event.key.keysym.sym == SDLK_q &&
+					        (event.key.keysym.mod & KMOD_META) != 0)
+						quit = true;
 #endif
 					if (event.key.keysym.sym == SDLK_F10) {
 						game->save_configuration("f1spirit.cfg");
@@ -410,6 +426,9 @@ int main(int argc, char** argv) {
 						} 
 					} 
 
+#ifdef __amigaos__
+					KEYBOARDSTATE::press(event.key.keysym.sym);
+#endif
 					/* Keyboard event */
 					SDL_keysym *ks;
 

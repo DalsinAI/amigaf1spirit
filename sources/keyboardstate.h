@@ -25,6 +25,13 @@ class KEYBOARDSTATE
 		unsigned char *old_keyboard;
 		unsigned char *keyboard;
 		List<SDL_keysym> keyevents;
+
+#ifdef __amigaos__
+		/* A key pressed and let go between two cycles (both in one
+		   SDL_PollEvent round, when a frame takes long) is still seen
+		   held for one cycle: main() calls press() for each key down. */
+		static void press(int sym);
+#endif
 };
 
 #endif
