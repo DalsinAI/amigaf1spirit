@@ -40,13 +40,16 @@ class RainDrop
 /* AmiCradle: the rain drops in arrays rather than a list of objects, in the
  * order upstream's list keeps them (weather.cpp). A drop with z >= 400 has
  * ended and is skipped (and dropped from the arrays the next cycle). The
- * speeds are always 2, 2, 20. */
+ * speeds are always 2, 2, 20, so the height is kept as a whole number: on
+ * the 68k (and more so emulated) a float operation costs several integer
+ * ones. */
 class RainDrops
 {
 
 	public:
 		RainDrops() {
-			x = y = z = 0;
+			x = y = 0;
+			z = 0;
 			ended = 0;
 			n = room = 0;
 		};
@@ -60,7 +63,8 @@ class RainDrops
 
 		bool grow(int want);
 
-		float *x, *y, *z;
+		float *x, *y;
+		short *z;	/* always a whole multiple of 20 from -200 to 400 */
 		int *ended;	/* this cycle's ended drops, by index */
 		int n, room;
 };

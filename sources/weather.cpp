@@ -304,27 +304,52 @@ void F1SpiritGame::draw_rain(PlayerCCar *v, float rain_strength)
 	{
 		CullPlanes cull;
 		const RainDrops *rd = &m_rain;
-		const float *X = rd->x, *Y = rd->y, *Z = rd->z;
+		const float *X = rd->x, *Y = rd->y;
+		const short *Z = rd->z;
 		float cx = v->c_x, cy = v->c_y;
 		float ox = v->c_old_x, oy = v->c_old_y;
 		int i, n = rd->n;
+		float sb[4], db[4], db2[4];
+		bool sbox, dbox;
 
 		cull_setup(&cull);
+		/* boxes round what can be seen at ground level (the splashes) and
+		 * from 200 up to it (the drops): four comparisons a drop rather
+		 * than the four planes; what is in the box but off the screen is
+		 * drawn and clipped, as it would be without the test */
+		sbox = cull_box(&cull, 0, 4, sb);
+		dbox = cull_box(&cull, 0, 64, db) && cull_box(&cull, -200, 64, db2);
+
+		if (dbox) {
+			if (db2[0] < db[0]) db[0] = db2[0];
+			if (db2[1] < db[1]) db[1] = db2[1];
+			if (db2[2] > db[2]) db[2] = db2[2];
+			if (db2[3] > db[3]) db[3] = db2[3];
+		}
+
+		/* to the track's coordinates, as the drops are kept */
+		sb[0] += cx; sb[2] += cx; sb[1] += cy; sb[3] += cy;
+		db[0] += cx; db[2] += cx; db[1] += cy; db[3] += cy;
+
 		glb_begin();
 
 		/* the splashes, each a six-point fan as four triangles */
 		for (i = 0;i < n;i++) {
-			float z = Z[i], px, py, a;
+			int z = Z[i];
+			float px, py, a;
 			GLfloat *p, *c;
 			int j;
 
 			if (z < 0 || z >= 400)
 				continue;
 
+			if (sbox && (X[i] < sb[0] || X[i] > sb[2] || Y[i] < sb[1] || Y[i] > sb[3]))
+				continue;
+
 			px = X[i] - cx;
 			py = Y[i] - cy;
 
-			if (!cull_visible(&cull, px, py, 0, 4))
+			if (!sbox && !cull_visible(&cull, px, py, 0, 4))
 				continue;
 
 			p = glb_reserve(GL_TRIANGLES, 0, 12, &c);
@@ -363,17 +388,21 @@ void F1SpiritGame::draw_rain(PlayerCCar *v, float rain_strength)
 
 		/* the falling drops, a line each */
 		for (i = 0;i < n;i++) {
-			float z = Z[i], px, py;
+			int z = Z[i];
+			float px, py;
 			GLfloat *p, *c;
 			int j;
 
 			if (z >= 0)
 				continue;
 
+			if (dbox && (X[i] < db[0] || X[i] > db[2] || Y[i] < db[1] || Y[i] > db[3]))
+				continue;
+
 			px = X[i] - cx;
 			py = Y[i] - cy;
 
-			if (!cull_visible(&cull, px, py, z, 64))
+			if (!dbox && !cull_visible(&cull, px, py, float(z), 64))
 				continue;
 
 			p = glb_reserve(GL_LINES, 0, 2, &c);
@@ -383,10 +412,10 @@ void F1SpiritGame::draw_rain(PlayerCCar *v, float rain_strength)
 
 			p[0] = px;
 			p[1] = py;
-			p[2] = z;
+			p[2] = float(z);
 			p[3] = X[i] - 2 * 2 - ox;	/* rd->x - rd->inc_x*2 - v->c_old_x */
 			p[4] = Y[i] - 2 * 2 - oy;
-			p[5] = z - 40;
+			p[5] = float(z - 40);
 
 			for (j = 0;j < 2;j++, c += 4) {
 				c[0] = 0.75f;
@@ -474,7 +503,8 @@ int to_delete_index;
 #ifdef __amigaos__
 bool RainDrops::grow(int want)
 {
-	float *nx, *ny, *nz;
+	float *nx, *ny;
+	short *nz;
 	int *ne;
 	int r = room ? room : 1024;
 
@@ -486,13 +516,13 @@ bool RainDrops::grow(int want)
 
 	nx = new float[r];
 	ny = new float[r];
-	nz = new float[r];
+	nz = new short[r];
 	ne = new int[r];
 
 	if (n > 0) {
 		memcpy(nx, x, n * sizeof(float));
 		memcpy(ny, y, n * sizeof(float));
-		memcpy(nz, z, n * sizeof(float));
+		memcpy(nz, z, n * sizeof(short));
 	}
 
 	delete []x;
@@ -517,7 +547,8 @@ void F1SpiritGame::cycle_rain(PlayerCCar *v, float rain_strength)
 {
 	int i, r, w, nended;
 	RainDrops *rd = &m_rain;
-	float *X, *Y, *Z;
+	float *X, *Y;
+	short *Z;
 	PlayerCCar *pc;
 	List<PlayerCCar> pc_l;
 
@@ -536,7 +567,8 @@ void F1SpiritGame::cycle_rain(PlayerCCar *v, float rain_strength)
 	nended = 0;
 
 	for (r = w = 0;r < rd->n;r++) {
-		float x, y, z = Z[r];
+		float x, y;
+		int z = Z[r];
 
 		if (z >= 400)
 			continue;	/* ended last cycle and not reused */
@@ -551,7 +583,7 @@ void F1SpiritGame::cycle_rain(PlayerCCar *v, float rain_strength)
 		} // if
 
 		if (z == 0) {
-			z = quick_random_b[quick_rain_random_index++] * 20;
+			z = int(quick_random_b[quick_rain_random_index++] * 20);
 
 			if (quick_rain_random_index >= RAIN_RANDOM_SIZE) quick_rain_random_index = 0;
 		} // if

@@ -67,6 +67,11 @@ struct CullPlanes {
 
 void cull_setup(CullPlanes *c);
 
+/* x0, y0, x1, y1 round what can be seen at height z, with r to spare: a
+ * cheaper first test than cull_visible for many points at one height (a
+ * point inside may still be off the screen). False if it can't be had. */
+bool cull_box(const CullPlanes *c, float z, float r, float *box);
+
 /* Could a sphere of radius r round (x, y, z) reach the screen? */
 static inline bool cull_visible(const CullPlanes *c, float x, float y, float z, float r)
 {
