@@ -9,8 +9,8 @@ AmigaOS 3.2 on a 68040 or 68060 with an FPU and an RTG screen, on
 GFOpenGPU's SDL 1.2 (sdl12-compat on SDL 2) and OpenGL.
 
 Status: test build. It starts, the menus work, and a race runs and can
-be driven in the AmiCradle lab, at 60 to 95 per cent of full speed on a
-busy host (see "Speed").
+be driven in the AmiCradle lab, at full speed on a quiet host and about
+60 per cent of it on a busy one (see "Speed").
 
 
 What you need
@@ -201,13 +201,68 @@ What is left in the drawing is mostly the port's own work on the CPU
 (placing 22,600 points a frame, most of them rain) and GL.module's
 handling of the arrays (2.6 ms a frame and up).
 
+The second round went after the game cycle and the sound:
+
+- RoadPiece.cpp: a car's nearest path point is found without trying
+  every point (the points are at most a known step apart, so those
+  that can't be nearer are skipped), starting from the one found last;
+  the distances are worked out as upstream does, so the same point is
+  found. Checked in the lab: a build that ran upstream's loop beside it
+  found the same point in 3.9 million calls, and the three title
+  demos (replays) gave the same car positions, bit for bit, for 4,680
+  cycles with and without the change.
+- weather.cpp: the rain drops are kept in arrays rather than a list of
+  objects, the heights as whole numbers, and are written straight into
+  the batch; the screen is tested as a box at the drops' heights. The
+  same drops in the same order (checked against upstream's list in 4,373
+  cycles of heavy rain), and the rain looks the same.
+- amiga/mixer.c: SDL 2's audio is opened at 22050 Hz directly. Through
+  SDL 1.2's SDL_OpenAudio (sdl12-compat) the device was opened at 44100
+  Hz and all the sound resampled on the 68k: 6 to 23 per cent of the
+  emulated CPU's time in a race, the more the busier the host. Falls back to SDL 1.2's call if SDL 2 won't give 22050.
+- auxiliar.cpp, ReplayInfo.cpp, F1SpiritGame.cpp: replays (the title
+  demos among them) are read in the PC's byte order, as they were
+  made; read in the 68k's order the demo cars' positions were not
+  numbers and the title screen hung once a demo started. The players'
+  and hi-score files stay as earlier Amiga builds wrote them.
+- main.cpp: no millisecond's sleep when the next cycle is due already.
+
+Measured with the timing build in a race in the rain (Practice, Stock,
+V8 2900, accelerator held, 100 s of race), before (main) and after
+(this round) back to back, with the host's load average (12 threads):
+
+| run | load | frames a second | cycles in 5 s (250 full) | emulated instructions a cycle |
+| --- | --- | --- | --- | --- |
+| before | 33 to 49 | 3.3 | 111 | 11.2 M |
+| after | 42 to 50 | 7.0 | 157 | 8.2 M |
+| before | 11 to 16 | 37.6 | 249 | 14.3 M |
+| after | 10 to 18 | 44.5 | 250 | 13.4 M |
+| before | 15 to 38 | 11.3 | 157 | 18.1 M |
+| after | 20 to 23 | 33.4 | 249 | 11.0 M |
+
+On a busy host the race now runs about 40 per cent faster than before
+(the game clock is the measure: a cycle is 20 ms of race); on a quiet
+host both reach full speed and the gain shows as frames (44.5 a
+second against 37.6). The third pair's loads differ, the after run's the lower.
+In the runtime's profile the nearest-point loop (8 per cent),
+the rain (5 to 11 per cent) and SDL 2's resampler (9 to 23 per
+cent) are gone; what is left is spread thin, nothing over about 4 per
+cent (the rain's drawing, the cars' collisions, the music's
+Vorbis decoding).
+
+-O3 and -flto were tried and are not used: both reached full speed on
+the quiet host, as -O2 does (39 and 40 frames a second against 33 to 45
+for -O2, inside the runs' spread), and -O3 makes the program 7 per cent
+larger.
+
 
 Known limits
 ------------
 
-- Speed: see "Speed". On a busy host the race can still fall below
-  full speed, mostly in the game's own logic for 54 cars and heavy
-  rain.
+- Speed: see "Speed". On a quiet host the race runs at full speed; on
+  a busy one (load average 40 to 50 on 12 threads) it still falls to
+  about 60 per cent, the emulation thread getting a third of a host
+  CPU.
 - No network play and no on-line hi-scores (see above).
 - The lab is muted, so the sound and music have not been heard.
 
@@ -245,3 +300,11 @@ host, and the car was driven (Space held: it reached 218 km/h; the
 cursor keys steered it; Escape paused the race). The track preview in the menus was drawn
 in 30 to 40 ms rather than 290 to 390 ms. Right Amiga+Q quit from the
 race.
+
+6 November 2026, the same lab, the build from a clean checkout of the
+second round (host load average 25 to 55): the title screen,
+Practice, the Stock track, a race at full speed (the lap clock about
+kept time with the wall clock), the car driven (Space held to
+115 km/h, the cursor keys steering), Escape paused the race, Space
+continued it, and Right Amiga+Q quit to the Workbench, with
+User/f1spirit.cfg written.
