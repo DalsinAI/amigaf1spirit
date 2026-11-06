@@ -26,6 +26,9 @@
 
 #include "RoadPiece.h"
 #include "track.h"
+#ifdef __amigaos__
+#include "glbatch.h"
+#endif
 
 #ifdef KITSCHY_DEBUG_MEMORY
 #include "debug_memorymanager.h"
@@ -324,6 +327,27 @@ void CTrack::cycle(void)
 } 
 
 
+/* AmiCradle: only what can reach the screen is drawn. Upstream drew every
+ * tyre mark, car and cloud on the track, and the scenery of a circle about
+ * 1300 pixels across, each frame; on a 68k each GL call costs. What is
+ * drawn is tested against the four side planes of the view as it is when
+ * the track is drawn (the camera turns with the car, sits off the screen's
+ * centre, and the clouds are high up, so the perspective matters); see
+ * amiga/glbatch.h, which also draws the sprites in batches. */
+
+#ifdef __amigaos__
+/* No point of a tile is further from where it is placed (its hot spot)
+ * than this. */
+static inline float tile_reach(GLTile *t, float zoom)
+{
+	if (t == 0)
+		return 0;
+
+	return float(t->get_dx() + t->get_dy() + abs(t->get_hot_x()) + abs(t->get_hot_y())) * (zoom < 1 ? 1 : zoom);
+}
+#endif
+
+
 void CTrack::draw(SDL_Rect *vp, float x, float y, float zoom, List<CPlacedGLTile> *extras, GLTile **road_textures, GLTile **lroad_textures, GLTile **rroad_textures, GLTile *road_line)
 {
 	int i, j, k;
@@ -337,6 +361,9 @@ void CTrack::draw(SDL_Rect *vp, float x, float y, float zoom, List<CPlacedGLTile
 	float d;
 	float part_rad = float(sqrt(part_h * part_h + part_v * part_v) / 2);
 	float screen_rad;
+#ifdef __amigaos__
+	CullPlanes cull;
+#endif
 	int part_x, part_y, part_neighbors;
 	float xr, yr, wr, hr;
 	float road_position = 0;
@@ -418,6 +445,12 @@ void CTrack::draw(SDL_Rect *vp, float x, float y, float zoom, List<CPlacedGLTile
 	glPushMatrix();
 
 	glScalef(zoom, zoom, zoom);
+
+#ifdef __amigaos__
+	cull_setup(&cull);
+	glb_active = true;
+	glb_begin();
+#endif
 
 	if (vp == 0) {
 		start_x = 320 - x;
@@ -533,6 +566,20 @@ void CTrack::draw(SDL_Rect *vp, float x, float y, float zoom, List<CPlacedGLTile
 
 					a = 1 - a;
 
+#ifdef __amigaos__
+					if (tm->t <= 0 || !cull_visible(&cull, start_x + tm->qx[0], start_y + tm->qy[0], tm->z, 64))
+						continue;
+
+					{
+						float q[12] = { start_x + tm->qx[0], start_y + tm->qy[0], tm->z,
+						                start_x + tm->qx[1], start_y + tm->qy[1], tm->z,
+						                start_x + tm->qx[3], start_y + tm->qy[3], tm->z2,
+						                start_x + tm->qx[2], start_y + tm->qy[2], tm->z2 };
+						glb_quad(0, q, 0, tm->r, tm->g, tm->b, a * 0.75F);
+						continue;
+					}
+#endif
+
 					glNormal3f(0.0, 0.0, 1.0);
 
 					glColor4f(tm->r, tm->g, tm->b, a*0.75F);
@@ -568,7 +615,10 @@ void CTrack::draw(SDL_Rect *vp, float x, float y, float zoom, List<CPlacedGLTile
 						l3.Rewind();
 
 						while (l3.Iterate(rpt)) {
-							rpt->draw(float(start_x), float(start_y), 0, 0, 1);
+#ifdef __amigaos__
+							if (cull_visible(&cull, start_x + rpt->x, start_y + rpt->y, rpt->z, tile_reach(rpt->tile, 1)))
+#endif
+								rpt->draw(float(start_x), float(start_y), 0, 0, 1);
 						} 
 					} 
 				} 
@@ -580,14 +630,23 @@ void CTrack::draw(SDL_Rect *vp, float x, float y, float zoom, List<CPlacedGLTile
 			l.Rewind();
 
 			while (l.Iterate(pt)) {
-				if ((pt->z <= k*( -8) && pt->z > (k + 1)*( -8)) ||
-				        (pt->z <= k*( -8) && k == 8)) {
+				if (((pt->z <= k*( -8) && pt->z > (k + 1)*( -8)) ||
+				        (pt->z <= k*( -8) && k == 8))
+#ifdef __amigaos__
+				        && cull_visible(&cull, start_x + pt->x, start_y + pt->y, pt->z, tile_reach(pt->tile, pt->zoom))
+#endif
+				   ) {
 					pt->draw(float(start_x), float(start_y), 0, 0, 1);
 					//     pt->tile->draw_cmc(pt->x+start_x,pt->y+start_y,-pt->z,pt->angle,1);
 				} 
 			} 
 		} 
 	} 
+
+#ifdef __amigaos__
+	glb_end();
+	glb_active = false;
+#endif
 
 	glPopMatrix();
 

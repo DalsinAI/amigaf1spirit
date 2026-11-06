@@ -11,6 +11,10 @@
 #include "2DCMC.h"
 #include "GLTile.h"
 #include "SDL_glutaux.h"
+#ifdef __amigaos__
+#include <math.h>
+#include "glbatch.h"
+#endif
 
 #ifdef KITSCHY_DEBUG_MEMORY
 #include "debug_memorymanager.h"
@@ -25,6 +29,9 @@ int GLTile::memory_used = 0;
 GLTile::GLTile()
 {
 	nparts = 0;
+#ifdef __amigaos__
+	atlas = 0;
+#endif
 
 	clamp = false;
 	smooth = false;
@@ -50,6 +57,9 @@ GLTile::GLTile()
 GLTile::GLTile(char *fname)
 {
 	nparts = 0;
+#ifdef __amigaos__
+	atlas = 0;
+#endif
 
 	clamp = false;
 	smooth = false;
@@ -77,6 +87,9 @@ GLTile::GLTile(char *fname)
 GLTile::GLTile(SDL_Surface *sfc)
 {
 	nparts = 0;
+#ifdef __amigaos__
+	atlas = 0;
+#endif
 
 	clamp = false;
 	smooth = false;
@@ -104,6 +117,9 @@ GLTile::GLTile(SDL_Surface *sfc)
 GLTile::GLTile(char *fname, int ax, int ay, int adx, int ady)
 {
 	nparts = 0;
+#ifdef __amigaos__
+	atlas = 0;
+#endif
 
 	clamp = false;
 	smooth = false;
@@ -148,6 +164,9 @@ GLTile::GLTile(char *fname, int ax, int ay, int adx, int ady)
 GLTile::GLTile(SDL_Surface *sfc, int ax, int ay, int adx, int ady)
 {
 	nparts = 0;
+#ifdef __amigaos__
+	atlas = 0;
+#endif
 
 	clamp = false;
 	smooth = false;
@@ -187,6 +206,9 @@ GLTile::GLTile(SDL_Surface *sfc, int ax, int ay, int adx, int ady)
 
 GLTile::GLTile(SDL_Surface **sfcs, int *start_x, int *start_y, int nsfcs, int adx, int ady)
 {
+#ifdef __amigaos__
+	atlas = 0;
+#endif
 
 	int i, k, l;
 	bool *empty;
@@ -289,6 +311,9 @@ GLTile::GLTile(SDL_Surface **sfcs, int *start_x, int *start_y, int nsfcs, int ad
 GLTile::GLTile(int ax, int ay, int adx, int ady)
 {
 	nparts = 0;
+#ifdef __amigaos__
+	atlas = 0;
+#endif
 
 	clamp = false;
 	smooth = false;
@@ -350,6 +375,10 @@ GLTile::~GLTile()
 
 void GLTile::free(void)
 {
+#ifdef __amigaos__
+	atlas_free();
+
+#endif
 	if (nparts != 0) {
 		int i;
 
@@ -868,6 +897,11 @@ void GLTile::draw(float r, float g, float b, float a)
 
 void GLTile::draw(float x, float y, float z, float angle, float scale)
 {
+#ifdef __amigaos__
+	if (batch(1, 1, 1, 1, x, y, z, angle, 0, scale))
+		return;
+
+#endif
 	glPushMatrix();
 	glTranslatef(x, y, z);
 
@@ -885,6 +919,11 @@ void GLTile::draw(float x, float y, float z, float angle, float scale)
 
 void GLTile::draw(float r, float g, float b, float a, float x, float y, float z, float angle, float scale)
 {
+#ifdef __amigaos__
+	if (batch(r, g, b, a, x, y, z, angle, 0, scale))
+		return;
+
+#endif
 	glPushMatrix();
 	glTranslatef(x, y, z);
 
@@ -898,6 +937,129 @@ void GLTile::draw(float r, float g, float b, float a, float x, float y, float z,
 
 	glPopMatrix();
 } // GLTile::draw
+
+
+#ifdef __amigaos__
+bool GLTile::batch(float r, float g, float b, float a, float px, float py, float pz, float angle_z, float angle_y, float scale)
+{
+	float cz = 1, sz = 0, cy = 1, sy = 0;
+	int i, j;
+
+	if (!glb_active)
+		return false;
+
+	if (textures_loaded != reload_textures) {
+		load_textures();
+		glb_forget();
+	}
+
+	if (angle_z != 0) {
+		cz = float(cos(angle_z * M_PI / 180));
+		sz = float(sin(angle_z * M_PI / 180));
+	}
+
+	if (angle_y != 0) {
+		cy = float(cos(angle_y * M_PI / 180));
+		sy = float(sin(angle_y * M_PI / 180));
+	}
+
+	/* A tile drawn more than once goes into the atlas (the game makes some
+	 * tiles, such as text, to draw once and throw away). */
+	if (atlas != 0 && atlas->gen != reload_textures)
+		atlas_free();
+
+	if (atlas == 0) {
+		atlas = new Atlas;
+		atlas->page = 0;
+		atlas->uv = 0;
+		atlas->gen = reload_textures;
+		atlas->uses = 0;
+	}
+
+	if (atlas->page == 0 && ++atlas->uses >= 2)
+		atlas_place();
+
+	for (i = 0; i < nparts; i++) {
+		float x0 = float(x[i] - hot_x), x1 = float(x[i] + dx[i] - hot_x);
+		float y0 = float(y[i] - hot_y), y1 = float(y[i] + dy[i] - hot_y);
+		float lx[4] = { x0, x0, x1, x1 }, ly[4] = { y0, y1, y1, y0 };
+		float st[8] = { 0, 0, 0, tex_coord_y[i], tex_coord_x[i], tex_coord_y[i], tex_coord_x[i], 0 };
+		float v[12];
+
+		for (j = 0; j < 4; j++) {
+			/* as glTranslatef, glRotatef(z), glRotatef(y), glScalef did */
+			float sx = lx[j] * scale, sy2 = ly[j] * scale;
+			float rx = sx * cy, rz = -sx * sy;
+
+			v[j * 3] = rx * cz - sy2 * sz + px;
+			v[j * 3 + 1] = rx * sz + sy2 * cz + py;
+			v[j * 3 + 2] = rz + pz;
+		}
+
+		if (atlas->page != 0 && atlas->page[i] >= 0) {
+			const float *uv = atlas->uv + i * 4;
+
+			st[0] = uv[0]; st[1] = uv[1];
+			st[2] = uv[0]; st[3] = uv[3];
+			st[4] = uv[2]; st[5] = uv[3];
+			st[6] = uv[2]; st[7] = uv[1];
+			glb_quad(glb_atlas_texture(atlas->page[i]), v, st, r, g, b, a);
+		} else {
+			glb_quad(tex[i], v, st, r, g, b, a);
+		}
+	}
+
+	return true;
+}
+
+void GLTile::atlas_place(void)
+{
+	int i;
+
+	atlas->page = new int[nparts > 0 ? nparts : 1];
+	atlas->uv = new float[(nparts > 0 ? nparts : 1) * 4];
+
+	for (i = 0; i < nparts; i++) {
+		SDL_Surface *sfc = tile[i], *sfc2;
+
+		atlas->page[i] = -1;
+
+		/* the atlas is drawn GL_NEAREST: smooth tiles keep their own */
+		if (sfc == 0 || smooth || sfc->w > 256 || sfc->h > 256)
+			continue;
+
+		/* as createTexture copies it */
+		sfc2 = SDL_CreateRGBSurface(SDL_SWSURFACE, sfc->w, sfc->h, 32, RMASK, GMASK, BMASK, AMASK);
+
+		if (sfc2 == 0)
+			continue;
+
+		SDL_SetAlpha(sfc, 0, 0);
+		SDL_BlitSurface(sfc, 0, sfc2, 0);
+		atlas->page[i] = glb_atlas_add(atlas->gen, sfc2->pixels, sfc2->pitch, sfc->w, sfc->h, atlas->uv + i * 4);
+		SDL_FreeSurface(sfc2);
+	}
+}
+
+void GLTile::atlas_free(void)
+{
+	int i;
+
+	if (atlas == 0)
+		return;
+
+	if (atlas->page != 0) {
+		for (i = 0; i < nparts; i++)
+			glb_atlas_release(atlas->gen, atlas->page[i]);
+
+		delete []atlas->page;
+		delete []atlas->uv;
+	}
+
+	delete atlas;
+	atlas = 0;
+}
+#endif
 
 
 void GLTile::draw_cmc(void)
@@ -1025,6 +1187,9 @@ void GLTile::optimize(int o_dx, int o_dy)
 
 
 		if (some_empty) {
+#ifdef __amigaos__
+			atlas_free();
+#endif
 
 			glDeleteTextures(1, &(tex[0]));
 

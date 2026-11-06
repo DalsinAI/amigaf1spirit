@@ -50,7 +50,8 @@ SRC     = 2DCMC auxiliar CCar CPlayer debug EnemyCCar F1SComputer \
           track Vector weather filehandling CarEngineSound
 OBJS    = $(SRC:%=$(OBJDIR)/sources/%.o) $(OBJDIR)/amiga/F1Shttp_amiga.o \
           $(OBJDIR)/amiga/mixer.o $(OBJDIR)/amiga/image.o $(OBJDIR)/amiga/glu.o \
-          $(OBJDIR)/amiga/stb_vorbis.o $(OBJDIR)/amiga/amiga_sys.o
+          $(OBJDIR)/amiga/stb_vorbis.o $(OBJDIR)/amiga/amiga_sys.o \
+          $(OBJDIR)/amiga/glbatch.o
 
 ICONS   = amiga/icons/F1Spirit.info amiga/icons/ReadMe.info amiga/icons/Data.info \
           amiga/icons/F1Spirit-drawer.info amiga/Install-F1Spirit amiga/Install-F1Spirit.info
