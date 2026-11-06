@@ -126,6 +126,7 @@ class CRoadPiece
 		/* AmiCradle: the longest step between path points (for path_x) */
 		float *path_step_of;
 		float path_step;
+		int path_seed;	/* the nearest point found last time */
 		float path_max_step(void);
 		int closest_path_point(float x, float y);
 #endif

@@ -58,6 +58,7 @@ CRoadPiece::CRoadPiece(void)
 #ifdef __amigaos__
 	path_step_of = 0;
 	path_step = 0;
+	path_seed = 0;
 #endif
 	path_y = 0;
 	path_z = 0;
@@ -104,6 +105,7 @@ CRoadPiece::CRoadPiece(float x, float y, float z)
 #ifdef __amigaos__
 	path_step_of = 0;
 	path_step = 0;
+	path_seed = 0;
 #endif
 	path_y = 0;
 	path_z = 0;
@@ -147,6 +149,7 @@ CRoadPiece::CRoadPiece(FILE *fp)
 #ifdef __amigaos__
 	path_step_of = 0;
 	path_step = 0;
+	path_seed = 0;
 #endif
 
 	path_y = 0;
@@ -194,6 +197,7 @@ CRoadPiece::~CRoadPiece()
 #ifdef __amigaos__
 	path_step_of = 0;
 	path_step = 0;
+	path_seed = 0;
 #endif
 	path_y = 0;
 	path_z = 0;
@@ -1173,35 +1177,71 @@ float CRoadPiece::path_max_step(void)
 
 int CRoadPiece::closest_path_point(float x, float y)
 {
-	int closest = 0;
-	int i, n = path_points;
-	long double d, min_d = -1;
-	float r_min = 0, step = path_max_step();
+	int closest, i, n = path_points;
+	long double dx, dy, d, min_d, reach2 = 0;
+	float step = path_max_step(), r_min = 0, margin = 0;
 
-	for (i = 0;i < n;i++) {
-		long double dx = (long double)x - path_x[i];
-		long double dy = (long double)y - path_y[i];
+	if (n <= 0)
+		return 0;
 
-		d = dx * dx + dy * dy;
+	/* Start from the point found last time: the cars that look are mostly
+	 * near one another, so the nearest so far is good from the start and
+	 * points on both sides of it are skipped. Equal distances go to the
+	 * first point, as in upstream's loop. */
+	closest = path_seed < n ? path_seed : 0;
+	dx = (long double)x - path_x[closest];
+	dy = (long double)y - path_y[closest];
+	min_d = dx * dx + dy * dy;
 
-		if (min_d == -1 || d < min_d) {
-			closest = i;
-			min_d = d;
-			r_min = float(sqrt(double(d)));
-		} else {
-			float gap = float(sqrt(double(d))) - r_min - (1.0f + r_min * (1.0f / 1024));
+	if (min_d != min_d) {
+		/* not a number: upstream's loop as it is */
+		closest = 0;
 
-			if (gap > step) {
-				float k = gap / step;
+		for (i = 0;i < n;i++) {
+			dx = (long double)x - path_x[i];
+			dy = (long double)y - path_y[i];
+			d = dx * dx + dy * dy;
 
-				if (k >= float(n))
-					break;
-
-				i += int(k);
+			if (i == 0 || d < min_d) {
+				closest = i;
+				min_d = d;
 			}
 		}
+
+		return closest;
 	}
 
+	for (i = -1;i < n;i++) {
+		if (i >= 0) {
+			dx = (long double)x - path_x[i];
+			dy = (long double)y - path_y[i];
+			d = dx * dx + dy * dy;
+
+			if (!(d < min_d || (d == min_d && i < closest))) {
+				/* not nearer: skip the points that can't be either */
+				if (d > reach2 && step > 0) {
+					float k = (sqrtf(float(d)) - r_min - margin) / step;
+
+					if (k >= float(n))
+						break;
+
+					if (k >= 1)
+						i += int(k);
+				}
+
+				continue;
+			}
+
+			closest = i;
+			min_d = d;
+		}
+
+		r_min = sqrtf(float(min_d));
+		margin = 1.0f + r_min * (1.0f / 1024);
+		reach2 = (long double)(r_min + margin + step) * (r_min + margin + step);
+	}
+
+	path_seed = closest;
 	return closest;
 }
 #endif
