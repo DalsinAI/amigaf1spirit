@@ -498,6 +498,12 @@ int main(int argc, char** argv) {
 			init_time = act_time;
 		} 
 
+#ifdef __amigaos__
+		/* AmiCradle: no sleep when the next cycle is due already (the
+		 * drawing took longer than a cycle): the millisecond is the
+		 * game's on a slow machine. */
+		if (SDL_GetTicks() - time < REDRAWING_PERIOD)
+#endif
 		SDL_Delay(1);
 
 	} 

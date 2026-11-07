@@ -103,6 +103,9 @@ bool load_float(FILE *fp, float *f);
 
 bool save_int(FILE *fp, int f);
 bool load_int(FILE *fp, int *f);
+#ifdef __amigaos__
+extern bool f1s_le_numbers;	/* replays: numbers least significant byte first */
+#endif
 
 
 #endif

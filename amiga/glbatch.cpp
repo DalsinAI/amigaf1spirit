@@ -132,6 +132,19 @@ void glb_line(float x1, float y1, float z1, float x2, float y2, float z2, float 
 	put(p2, 0, c);
 }
 
+GLfloat *glb_reserve(GLenum m, GLuint tex, int n, GLfloat **c)
+{
+	GLfloat *p;
+
+	if (!start(m, tex, n))
+		return 0;
+
+	p = pos + count * 3;
+	*c = col + count * 4;
+	count += n;
+	return p;
+}
+
 /* What this file has set in GL during a batch: set once, not at every
  * flush (each GL call costs on the 68k). */
 static bool in_batch = false;
@@ -398,4 +411,51 @@ void cull_setup(CullPlanes *c)
 				c->p[i][j] /= len;
 		}
 	}
+}
+
+/* The box round what the four planes leave of the plane at height z, each
+ * plane moved out by r: the corners where two planes meet that the other
+ * two let through. False when they don't close it (fewer than three). */
+bool cull_box(const CullPlanes *c, float z, float r, float *box)
+{
+	int i, j, k, n = 0;
+
+	for (i = 0; i < 4; i++) {
+		for (j = i + 1; j < 4; j++) {
+			double a1 = c->p[i][0], b1 = c->p[i][1], e1 = -(c->p[i][2] * z + c->p[i][3] + r);
+			double a2 = c->p[j][0], b2 = c->p[j][1], e2 = -(c->p[j][2] * z + c->p[j][3] + r);
+			double det = a1 * b2 - a2 * b1, x, y;
+			bool in = true;
+
+			if (fabs(det) < 1e-9)
+				continue;
+
+			x = (e1 * b2 - e2 * b1) / det;
+			y = (a1 * e2 - a2 * e1) / det;
+
+			for (k = 0; k < 4 && in; k++) {
+				if (k != i && k != j &&
+				        c->p[k][0] * x + c->p[k][1] * y + c->p[k][2] * z + c->p[k][3] + r < -0.01 * (1 + fabs(x) + fabs(y)))
+					in = false;
+			}
+
+			if (!in)
+				continue;
+
+			if (n == 0 || x < box[0]) box[0] = float(x);
+			if (n == 0 || y < box[1]) box[1] = float(y);
+			if (n == 0 || x > box[2]) box[2] = float(x);
+			if (n == 0 || y > box[3]) box[3] = float(y);
+			n++;
+		}
+	}
+
+	if (n < 3)
+		return false;
+
+	box[0] -= 1;
+	box[1] -= 1;
+	box[2] += 1;
+	box[3] += 1;
+	return true;
 }

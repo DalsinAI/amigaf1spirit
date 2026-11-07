@@ -29,6 +29,11 @@ void glb_quad(GLuint tex, const float *xyz, const float *st, float r, float g, f
 void glb_line(float x1, float y1, float z1, float x2, float y2, float z2, float r, float g, float b, float a);
 void glb_flush(void);
 
+/* Room for n untextured (tex 0) or textured points of mode m, written by the
+ * caller: x, y, z at the pointer returned, r, g, b, a (0..1) at *c; texture
+ * coordinates are not set. 0 when there is no room. */
+GLfloat *glb_reserve(GLenum m, GLuint tex, int n, GLfloat **c);
+
 /* Around a run of batched drawing with nothing else drawn in between:
  * the arrays are set up once, and texturing is turned on and off only
  * when it changes. Without them each flush sets up and puts back. */
@@ -61,6 +66,11 @@ struct CullPlanes {
 };
 
 void cull_setup(CullPlanes *c);
+
+/* x0, y0, x1, y1 round what can be seen at height z, with r to spare: a
+ * cheaper first test than cull_visible for many points at one height (a
+ * point inside may still be off the screen). False if it can't be had. */
+bool cull_box(const CullPlanes *c, float z, float r, float *box);
 
 /* Could a sphere of radius r round (x, y, z) reach the screen? */
 static inline bool cull_visible(const CullPlanes *c, float x, float y, float z, float r)

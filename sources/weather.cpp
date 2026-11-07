@@ -297,63 +297,135 @@ void F1SpiritGame::draw_rain(PlayerCCar *v, float rain_strength)
 	/* AmiCradle: the drops on the screen only (they fall over a square
 	 * 1400 pixels across round the car), in two glDrawArrays calls rather
 	 * than a glBegin/glEnd each (amiga/glbatch.h): heavy rain starts 800
-	 * drops a cycle, some 20,000 drops and splashes at once. The splashes on the ground go first and
-	 * the falling drops over them, rather than mixed in the list's order. */
+	 * drops a cycle, some 20,000 drops and splashes at once. The splashes
+	 * on the ground go first and the falling drops over them, rather than
+	 * mixed in the list's order. The points are written straight into the
+	 * batch's arrays. */
 	{
 		CullPlanes cull;
-		int pass;
+		const RainDrops *rd = &m_rain;
+		const float *X = rd->x, *Y = rd->y;
+		const short *Z = rd->z;
+		float cx = v->c_x, cy = v->c_y;
+		float ox = v->c_old_x, oy = v->c_old_y;
+		int i, n = rd->n;
+		float sb[4], db[4], db2[4];
+		bool sbox, dbox;
 
 		cull_setup(&cull);
+		/* boxes round what can be seen at ground level (the splashes) and
+		 * from 200 up to it (the drops): four comparisons a drop rather
+		 * than the four planes; what is in the box but off the screen is
+		 * drawn and clipped, as it would be without the test */
+		sbox = cull_box(&cull, 0, 4, sb);
+		dbox = cull_box(&cull, 0, 64, db) && cull_box(&cull, -200, 64, db2);
+
+		if (dbox) {
+			if (db2[0] < db[0]) db[0] = db2[0];
+			if (db2[1] < db[1]) db[1] = db2[1];
+			if (db2[2] > db[2]) db[2] = db2[2];
+			if (db2[3] > db[3]) db[3] = db2[3];
+		}
+
+		/* to the track's coordinates, as the drops are kept */
+		sb[0] += cx; sb[2] += cx; sb[1] += cy; sb[3] += cy;
+		db[0] += cx; db[2] += cx; db[1] += cy; db[3] += cy;
+
 		glb_begin();
 
-		for (pass = 0;pass < 2;pass++) {
-			m_rain_drops.Rewind();
+		/* the splashes, each a six-point fan as four triangles */
+		for (i = 0;i < n;i++) {
+			int z = Z[i];
+			float px, py, a;
+			GLfloat *p, *c;
+			int j;
 
-			while (m_rain_drops.Iterate(rd)) {
-				float px = rd->x - v->c_x, py = rd->y - v->c_y;
+			if (z < 0 || z >= 400)
+				continue;
 
-				if (rd->z < 0) {
-					if (pass == 0 || !cull_visible(&cull, px, py, rd->z, 64))
-						continue;
+			if (sbox && (X[i] < sb[0] || X[i] > sb[2] || Y[i] < sb[1] || Y[i] > sb[3]))
+				continue;
 
-					glb_line(px, py, rd->z,
-					         rd->x - rd->inc_x*2 - v->c_old_x, rd->y - rd->inc_y*2 - v->c_old_y, rd->z - rd->inc_z*2,
-					         0.75f, 0.75f, 1.0f, 0.5f);
-				} else {
-					float fan[6][3], tri[9];
-					int i;
+			px = X[i] - cx;
+			py = Y[i] - cy;
 
-					if (pass == 1 || !cull_visible(&cull, px, py, 0, 4))
-						continue;
+			if (!sbox && !cull_visible(&cull, px, py, 0, 4))
+				continue;
 
-					f = rd->z / 500.0f;
-					v1 = 0.5f * (f + 0.5f);
-					v2 = 1.5f * (f + 0.5f);
-					f = (1.0f - f) * 0.5f;
+			p = glb_reserve(GL_TRIANGLES, 0, 12, &c);
 
-					fan[0][0] = px;      fan[0][1] = py - v2;
-					fan[1][0] = px + v2; fan[1][1] = py - v1;
-					fan[2][0] = px + v2; fan[2][1] = py + v1;
-					fan[3][0] = px;      fan[3][1] = py + v2;
-					fan[4][0] = px - v2; fan[4][1] = py + v1;
-					fan[5][0] = px - v2; fan[5][1] = py - v1;
+			if (!p)
+				break;
 
-					for (i = 0;i < 6;i++)
-						fan[i][2] = 0;
+			f = z / 500.0f;
+			v1 = 0.5f * (f + 0.5f);
+			v2 = 1.5f * (f + 0.5f);
+			a = (1.0f - f) * 0.5f;
 
-					/* the fan as four triangles */
-					for (i = 1;i < 5;i++) {
-						memcpy(tri, fan[0], sizeof(fan[0]));
-						memcpy(tri + 3, fan[i], sizeof(fan[0]));
-						memcpy(tri + 6, fan[i + 1], sizeof(fan[0]));
-						glb_tri(0, tri, 0, 0.05f, 0.05f, 0.1f, f);
-					} 
-				} 
-			} 
+			{
+				float fx[6] = { px, px + v2, px + v2, px, px - v2, px - v2 };
+				float fy[6] = { py - v2, py - v1, py + v1, py + v2, py + v1, py - v1 };
 
-			glb_flush();
-		} 
+				for (j = 1;j < 5;j++, p += 9) {
+					p[0] = fx[0];     p[1] = fy[0];     p[2] = 0;
+					p[3] = fx[j];     p[4] = fy[j];     p[5] = 0;
+					p[6] = fx[j + 1]; p[7] = fy[j + 1]; p[8] = 0;
+				}
+			}
 
+			if (a > 1) a = 1;
+			if (a < 0) a = 0;
+
+			for (j = 0;j < 12;j++, c += 4) {
+				c[0] = 0.05f;
+				c[1] = 0.05f;
+				c[2] = 0.1f;
+				c[3] = a;
+			}
+		}
+
+		glb_flush();
+
+		/* the falling drops, a line each */
+		for (i = 0;i < n;i++) {
+			int z = Z[i];
+			float px, py;
+			GLfloat *p, *c;
+			int j;
+
+			if (z >= 0)
+				continue;
+
+			if (dbox && (X[i] < db[0] || X[i] > db[2] || Y[i] < db[1] || Y[i] > db[3]))
+				continue;
+
+			px = X[i] - cx;
+			py = Y[i] - cy;
+
+			if (!dbox && !cull_visible(&cull, px, py, float(z), 64))
+				continue;
+
+			p = glb_reserve(GL_LINES, 0, 2, &c);
+
+			if (!p)
+				break;
+
+			p[0] = px;
+			p[1] = py;
+			p[2] = float(z);
+			p[3] = X[i] - 2 * 2 - ox;	/* rd->x - rd->inc_x*2 - v->c_old_x */
+			p[4] = Y[i] - 2 * 2 - oy;
+			p[5] = float(z - 40);
+
+			for (j = 0;j < 2;j++, c += 4) {
+				c[0] = 0.75f;
+				c[1] = 0.75f;
+				c[2] = 1.0f;
+				c[3] = 0.5f;
+			}
+		}
+
+		glb_flush();
 		glb_end();
 	}
 #else
@@ -428,6 +500,139 @@ int to_delete_index;
 
 
 
+#ifdef __amigaos__
+bool RainDrops::grow(int want)
+{
+	float *nx, *ny;
+	short *nz;
+	int *ne;
+	int r = room ? room : 1024;
+
+	if (want <= room)
+		return true;
+
+	while (r < want)
+		r *= 2;
+
+	nx = new float[r];
+	ny = new float[r];
+	nz = new short[r];
+	ne = new int[r];
+
+	if (n > 0) {
+		memcpy(nx, x, n * sizeof(float));
+		memcpy(ny, y, n * sizeof(float));
+		memcpy(nz, z, n * sizeof(short));
+	}
+
+	delete []x;
+	delete []y;
+	delete []z;
+	delete []ended;
+	x = nx;
+	y = ny;
+	z = nz;
+	ended = ne;
+	room = r;
+	return true;
+}
+
+
+/* AmiCradle: upstream's cycle_rain (below) on the arrays of RainDrops: the
+ * same drops, in the same order, given the same random numbers, at a
+ * fraction of the cost (each drop was an object on a linked list). Drops
+ * that end are reused for the new ones last first, as upstream does; the
+ * rest are dropped from the arrays in the next cycle's pass. */
+void F1SpiritGame::cycle_rain(PlayerCCar *v, float rain_strength)
+{
+	int i, r, w, nended;
+	RainDrops *rd = &m_rain;
+	float *X, *Y;
+	short *Z;
+	PlayerCCar *pc;
+	List<PlayerCCar> pc_l;
+
+	if (!quick_rain_random_generated) {
+		for (i = 0;i < RAIN_RANDOM_SIZE;i++) {
+			quick_random_a[i] = rg->IRandom(0, RAIN_DROPS_SPAN * 2);
+			quick_random_b[i] = rg->IRandom(0, 20);
+		} // for
+
+		quick_rain_random_generated = true;
+	} // if
+
+	X = rd->x;
+	Y = rd->y;
+	Z = rd->z;
+	nended = 0;
+
+	for (r = w = 0;r < rd->n;r++) {
+		float x, y;
+		int z = Z[r];
+
+		if (z >= 400)
+			continue;	/* ended last cycle and not reused */
+
+		x = X[r];
+		y = Y[r];
+		z += 20;
+
+		if (z < 0) {
+			x += 2;
+			y += 2;
+		} // if
+
+		if (z == 0) {
+			z = int(quick_random_b[quick_rain_random_index++] * 20);
+
+			if (quick_rain_random_index >= RAIN_RANDOM_SIZE) quick_rain_random_index = 0;
+		} // if
+
+		X[w] = x;
+		Y[w] = y;
+		Z[w] = z;
+
+		if (z >= 400)
+			rd->ended[nended++] = w;
+
+		w++;
+	} // for
+
+	rd->n = w;
+
+	pc_l.Instance(player_cars);
+	pc_l.Rewind();
+
+	while (pc_l.Iterate(pc)) {
+		for (i = 0;i < RAIN_DROPS_PER_CYCLE*rain_strength;i++) {
+			int s;
+
+			if (nended > 0) {
+				// Reuse a drop that ended this cycle:
+				s = rd->ended[--nended];
+			} else {
+				if (!rd->grow(rd->n + 1))
+					return;
+
+				s = rd->n++;
+			} // if
+
+			rd->x[s] = pc->car->get_x() + quick_random_a[quick_rain_random_index++] - RAIN_DROPS_SPAN;
+
+			if (quick_rain_random_index >= RAIN_RANDOM_SIZE) quick_rain_random_index = 0;
+
+			rd->y[s] = pc->car->get_y() + quick_random_a[quick_rain_random_index++] - RAIN_DROPS_SPAN;
+
+			if (quick_rain_random_index >= RAIN_RANDOM_SIZE) quick_rain_random_index = 0;
+
+			rd->z[s] = -200;
+		} // for
+	} // while
+
+	/* the drops still in ended[] keep z >= 400: draw_rain skips them and
+	 * the next cycle's pass leaves them out */
+}
+#else
 void F1SpiritGame::cycle_rain(PlayerCCar *v, float rain_strength)
 {
 	int i;
@@ -506,5 +711,4 @@ void F1SpiritGame::cycle_rain(PlayerCCar *v, float rain_strength)
 		delete rd;
 	} // while
 } 
-
-
+#endif
