@@ -31,14 +31,17 @@ void output_debug_message(const char *fmt, ...)
 
 	va_start(ap, fmt);
 
-	vsprintf(text, fmt, ap);
+	vsnprintf(text, sizeof(text), fmt, ap);
 
 	va_end(ap);
 
 	if (fp == 0)
 		fp = f1open("f1spirit.dbg", "w", USERDATA);
 
-	fprintf(fp, text);
+	if (fp == 0)
+		return ;
+
+	fputs(text, fp);
 
 	fflush(fp);
 } /* glprintf */
@@ -48,6 +51,7 @@ void output_debug_message(const char *fmt, ...)
 
 void close_debug_messages(void)
 {
-	fclose(fp);
+	if (fp != 0)
+		fclose(fp);
 	fp = 0;
 } /* close_debug_messages */
