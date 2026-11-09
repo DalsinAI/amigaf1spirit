@@ -90,7 +90,7 @@ dist: $(BUILD)/$(PROG) $(ICONS) AMIGA_PORT.md readme.txt amiga/Licences.txt
 	cp amiga/Licences.txt $(OUT)/Licences.txt
 	cp amiga/icons/F1Spirit.info amiga/icons/ReadMe.info $(OUT)/
 	for f in ReadMe-f1spirit COPYING.txt Licences.txt; do cp amiga/icons/ReadMe.info $(OUT)/$$f.info; done
-	for d in $(DATADIRS) User; do cp amiga/icons/Data.info $(OUT)/$$d.info; done
+	for d in User; do cp amiga/icons/Data.info $(OUT)/$$d.info; done
 	cp amiga/icons/F1Spirit-drawer.info $(DIST)/F1Spirit.info
 	cp amiga/Install-F1Spirit amiga/Install-F1Spirit.info $(DIST)/
 
